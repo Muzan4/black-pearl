@@ -41,8 +41,12 @@ class Game {
       if (this.state === 'playing') {
         const modeIdx = typeof index === 'number' ? index : (index === 'round' ? 0 : index === 'chain' ? 1 : index === 'grape' ? 2 : parseInt(index, 10) || 0);
         this.player.setAmmoModeIndex(modeIdx);
-        this.ui.highlightActiveAmmo(modeIdx);
+        this.ui.highlightActiveAmmo(this.player.ammoModeIndex);
         this.audio.play('ui');
+        const activeMode = this.player.activeAmmoMode;
+        if (activeMode) {
+          this.floatingTexts.push(new FloatingText(this.player.x, this.player.y - 38, `${activeMode.icon || '●'} ${activeMode.name}`, activeMode.glow || '#facc15', 18));
+        }
       }
     };
   }
@@ -139,11 +143,21 @@ class Game {
     };
 
     const ammoSwitch = this.input.consumeAmmoSwitch();
-    if (ammoSwitch != null) {
-      const modeIdx = typeof ammoSwitch === 'number' ? ammoSwitch : (ammoSwitch === 'round' ? 0 : ammoSwitch === 'chain' ? 1 : ammoSwitch === 'grape' ? 2 : parseInt(ammoSwitch, 10) || 0);
-      this.player.setAmmoModeIndex(modeIdx);
-      this.ui.highlightActiveAmmo(modeIdx);
+    const ammoRotate = this.input.consumeAmmoRotate();
+    if (ammoSwitch != null || ammoRotate !== 0) {
+      if (ammoSwitch != null) {
+        const modeIdx = typeof ammoSwitch === 'number' ? ammoSwitch : (ammoSwitch === 'round' ? 0 : ammoSwitch === 'chain' ? 1 : ammoSwitch === 'grape' ? 2 : parseInt(ammoSwitch, 10) || 0);
+        this.player.setAmmoModeIndex(modeIdx);
+      } else if (ammoRotate !== 0) {
+        this.player.cycleAmmoMode(ammoRotate);
+      }
+      this.ui.highlightActiveAmmo(this.player.ammoModeIndex);
       this.audio.play('ui');
+
+      const activeMode = this.player.activeAmmoMode;
+      if (activeMode) {
+        this.floatingTexts.push(new FloatingText(this.player.x, this.player.y - 38, `${activeMode.icon || '●'} ${activeMode.name}`, activeMode.glow || '#facc15', 18));
+      }
     }
 
     if (input.repairPressed) {

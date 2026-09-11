@@ -179,6 +179,15 @@ class Player {
     this.ammoType = this.activeAmmoMode?.id || 'standard';
   }
 
+  cycleAmmoMode(direction = 1) {
+    const modes = this.gun?.ammoModes;
+    const count = modes && modes.length > 0 ? modes.length : 3;
+    const step = direction > 0 ? 1 : -1;
+    this.ammoModeIndex = (this.ammoModeIndex + step + count) % count;
+    this.ammoType = this.activeAmmoMode?.id || 'standard';
+    return this.ammoModeIndex;
+  }
+
   addCoins(amount) {
     const qmBonus = 1 + (this.crewUpgrades?.quartermaster ? (this.crewUpgrades.quartermaster - 1) * 0.25 : 0);
     const finalAmt = Math.round(amount * qmBonus);

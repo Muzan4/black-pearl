@@ -13,6 +13,7 @@ class InputManager {
       repairPressed: false,
       pausePressed: false,
       ammoSwitch: null,
+      ammoRotate: 0,
       targetX: 0,
       targetY: 0,
     };
@@ -31,6 +32,21 @@ class InputManager {
       this.mouse.x = e.clientX;
       this.mouse.y = e.clientY;
     });
+
+    // Mouse Wheel weapon mode rotation during naval combat
+    let lastWheelTime = 0;
+    window.addEventListener('wheel', e => {
+      if (window.game?.state === 'playing') {
+        e.preventDefault();
+        const now = performance.now();
+        if (now - lastWheelTime < 100) return;
+        const dir = e.deltaY > 0 ? 1 : (e.deltaY < 0 ? -1 : 0);
+        if (dir !== 0) {
+          lastWheelTime = now;
+          this.state.ammoRotate = dir;
+        }
+      }
+    }, { passive: false });
 
     canvas.addEventListener('mousedown', e => {
       if (e.button === 0) {
@@ -223,5 +239,11 @@ class InputManager {
     const sw = this.state.ammoSwitch;
     this.state.ammoSwitch = null;
     return sw;
+  }
+
+  consumeAmmoRotate() {
+    const rot = this.state.ammoRotate;
+    this.state.ammoRotate = 0;
+    return rot || 0;
   }
 }

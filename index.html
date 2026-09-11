@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Black Pearl: Lagoon Siege</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=IM+Fell+English:ital@0;1&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div id="game-container">
+    <canvas id="game-canvas"></canvas>
+
+    <!-- HUD -->
+    <div id="hud" class="hidden">
+      <div class="hud-top">
+        <div class="hud-panel score-panel">
+          <span class="label">SCORE</span>
+          <span id="score-display">0</span>
+        </div>
+        <div class="hud-panel wave-panel">
+          <span class="label">WAVE</span>
+          <span id="wave-display">1</span>
+        </div>
+        <div class="hud-panel combo-panel">
+          <span class="label">COMBO</span>
+          <span id="combo-display">×1</span>
+        </div>
+        <div class="hud-panel level-panel">
+          <span class="label">ZONE</span>
+          <span id="level-display">Volcanic Lagoon</span>
+        </div>
+        <div class="hud-panel coin-panel">
+          <span class="label">DOUBLOONS</span>
+          <span id="coin-display">🪙 0</span>
+        </div>
+        <button id="armory-toggle-btn" class="hud-armory-btn" title="Open Gunsmith Armory [B]">⚔ ARMORY [B]</button>
+      </div>
+
+      <div class="hud-bars">
+        <div class="bar-group">
+          <span class="bar-label">⚓ HULL</span>
+          <div class="bar-track"><div id="hull-bar" class="bar-fill hull"></div></div>
+        </div>
+        <div class="bar-group">
+          <span class="bar-label">⛵ SAILS</span>
+          <div class="bar-track"><div id="sail-bar" class="bar-fill sail"></div></div>
+        </div>
+        <div class="bar-group">
+          <span class="bar-label">☠ CREW</span>
+          <div class="bar-track"><div id="crew-bar" class="bar-fill crew"></div></div>
+        </div>
+        <div class="bar-group">
+          <span class="bar-label">🔧 REPAIR</span>
+          <div class="bar-track"><div id="repair-bar" class="bar-fill repair"></div></div>
+        </div>
+      </div>
+
+      <div class="hud-bottom">
+        <div class="abilities-row">
+          <div class="ammo-selector" id="weapon-ammo-selector">
+            <!-- Dynamically populated based on active equipped weapon via ui.js -->
+          </div>
+
+          <div id="broadside-indicator" class="broadside-panel ready" title="Right-Click or E to unleash Port & Starboard Broadsides">
+            <span class="broadside-icon">⚔</span>
+            <div class="broadside-info">
+              <span class="broadside-name">BROADSIDE [E/R-Click]</span>
+              <div class="broadside-bar-track"><div class="broadside-bar-fill"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="gun-info">
+          <span id="gun-name">Iron Swivel</span>
+          <div class="reload-indicator"><div id="reload-bar"></div></div>
+        </div>
+
+        <div class="controls-hint desktop-only">
+          <span>WASD Steer · Mouse Aim · Left-Click/SPACE: Chaser Cannons · Right-Click/E: Broadsides · R Repair · 1-3 Weapon Ordnance Modes</span>
+        </div>
+      </div>
+
+      <div id="wave-announce" class="wave-announce hidden">
+        <h2 id="wave-title">WAVE 1</h2>
+        <p id="wave-subtitle">Royal Navy Approaching!</p>
+      </div>
+
+      <div id="unlock-toast" class="unlock-toast hidden">
+        <span class="unlock-icon">⚔</span>
+        <span id="unlock-text">New Cannon Unlocked!</span>
+      </div>
+    </div>
+
+    <!-- Touch Controls -->
+    <div id="touch-controls" class="hidden">
+      <div id="joystick-zone" class="joystick-zone">
+        <div id="joystick-knob" class="joystick-knob"></div>
+      </div>
+      <button id="fire-btn" class="touch-btn fire-btn">CHASER</button>
+      <button id="broadside-btn" class="touch-btn broadside-btn">SALVO</button>
+      <button id="repair-btn" class="touch-btn repair-btn">REPAIR</button>
+      <div class="touch-ammo" id="touch-ammo-container">
+        <!-- Dynamically populated based on active equipped weapon via ui.js -->
+      </div>
+    </div>
+
+    <!-- Home Menu / Quarterdeck Command Dashboard -->
+    <div id="main-menu" class="overlay home-menu-overlay">
+      <div class="quarterdeck-dashboard">
+        <!-- Dashboard Top Header -->
+        <header class="quarterdeck-header">
+          <div class="flagship-title-group">
+            <div class="ship-crest" id="flagship-crest">⚓</div>
+            <div>
+              <h1 class="quarterdeck-ship-name" id="flagship-title-name">THE BLACK PEARL</h1>
+              <p class="quarterdeck-subtitle" id="flagship-subtitle-desc">Cursed Flagship · Quarterdeck Command Center</p>
+            </div>
+          </div>
+
+          <div class="fleet-summary-chips">
+            <div class="summary-chip" id="chip-hull">
+              <span class="chip-label">HULL HP</span>
+              <span class="chip-val" id="summary-hull">100</span>
+            </div>
+            <div class="summary-chip" id="chip-speed">
+              <span class="chip-label">SPEED</span>
+              <span class="chip-val" id="summary-speed">4.5 kts</span>
+            </div>
+            <div class="summary-chip" id="chip-crew">
+              <span class="chip-label">CREW</span>
+              <span class="chip-val" id="summary-crew">100</span>
+            </div>
+            <div class="summary-chip coin-chip">
+              <span class="chip-label">DOUBLOONS</span>
+              <span class="chip-val gold-glow" id="home-coins-display">🪙 0</span>
+            </div>
+          </div>
+
+          <div class="deploy-action-group">
+            <button id="start-btn" class="menu-btn primary set-sail-btn">
+              <span>SET SAIL</span>
+              <span class="sail-sub">ENTER LAGOON ➔</span>
+            </button>
+          </div>
+        </header>
+
+        <!-- Navigation Tabs -->
+        <nav class="quarterdeck-tabs">
+          <button class="qd-tab active" data-tab="ship">🚢 Fleet &amp; Upgrades</button>
+          <button class="qd-tab" data-tab="crew">☠ Crew Manifest</button>
+          <button class="qd-tab" data-tab="armory">⚔ Weapons Armory</button>
+          <button class="qd-tab" data-tab="howto">📜 Captain's Orders</button>
+          <button class="qd-tab" data-tab="scores">🏆 High Scores</button>
+        </nav>
+
+        <!-- Tab Panes Container -->
+        <main class="quarterdeck-body">
+          <!-- Pane 1: Ship Upgrades & Fleet Shipyard -->
+          <section id="tab-pane-ship" class="qd-pane active">
+            <div class="shipyard-section">
+              <div class="pane-header">
+                <h2>Fleet Shipyard &amp; Flagship Selection</h2>
+                <p>Purchase legendary naval vessels with doubloons, from agile corsair cutters to 4-masted dreadnoughts.</p>
+              </div>
+              <div id="fleet-shipyard-grid" class="shipyard-grid">
+                <!-- Rendered via ui.js -->
+              </div>
+            </div>
+
+            <div class="keel-section">
+              <div class="pane-header" style="margin-top: 2rem;">
+                <h2>Shipwright &amp; Keel Modifications</h2>
+                <p>Upgrade your flagship's hull armor, trim sails for speed, expand crew quarters, and fortify broadside gun decks.</p>
+              </div>
+              <div id="ship-upgrades-grid" class="upgrades-grid">
+                <!-- Rendered via ui.js -->
+              </div>
+            </div>
+          </section>
+
+          <!-- Pane 2: Crew Manifest -->
+          <section id="tab-pane-crew" class="qd-pane">
+            <div class="pane-header">
+              <h2>Officer Manifest &amp; Command Roster</h2>
+              <p>Promote specialist officers to unlock passive health regeneration, cannon damage buffs, and gold bonuses.</p>
+            </div>
+            <div id="crew-manifest-grid" class="crew-grid">
+              <!-- Rendered via ui.js -->
+            </div>
+          </section>
+
+          <!-- Pane 3: Weapons Armory -->
+          <section id="tab-pane-armory" class="qd-pane">
+            <div class="pane-header">
+              <h2>Ordnance Rack &amp; Exotic Artillery</h2>
+              <p>Purchase sniper chasers, magma mortars, kraken tormentors, and storm railguns with custom targeting reticles.</p>
+            </div>
+            <div id="home-armory-grid" class="armory-grid">
+              <!-- Rendered via ui.js -->
+            </div>
+          </section>
+
+          <!-- Pane 4: How To Play -->
+          <section id="tab-pane-howto" class="qd-pane">
+            <div class="pane-header">
+              <h2>Captain's Orders &amp; Naval Tactics</h2>
+              <p>Master helm navigation, wind vectors, broadside angles, and salvage scavenging to conquer the high seas.</p>
+            </div>
+            <div class="howto-grid">
+              <div class="howto-section">
+                <h3>Naval Navigation</h3>
+                <p><kbd>WASD</kbd> — Steer vessel across open lagoon waters</p>
+                <p><kbd>Mouse</kbd> — Aim swivels &amp; ship heading</p>
+                <p><kbd>💨 Wind</kbd> — Catch tailwinds for a 25% surge with foaming bow waves!</p>
+              </div>
+              <div class="howto-section">
+                <h3>Broadsides &amp; Cannons</h3>
+                <p><kbd>Left-Click</kbd> or <kbd>SPACE</kbd> — Bow Chaser volleys</p>
+                <p><kbd>Right-Click</kbd> or <kbd>E</kbd> — <strong>Port &amp; Starboard Broadsides</strong> (Devastating flank fire!)</p>
+                <p><kbd>1 / 2 / 3</kbd> — Switch Weapon Ordnance: Piercing Darts, Shotgun Spreads, &amp; Signature Munitions</p>
+              </div>
+              <div class="howto-section">
+                <h3>Floating Salvage</h3>
+                <p>💰 <strong>Treasure Chests</strong> — Doubloons &amp; Combo score</p>
+                <p>⚓ <strong>Timber Planks</strong> — Instant +30 Hull Repair</p>
+                <p>⚡ <strong>Rum Cask</strong> — 8s Frenzy (Speed &amp; Rapid Fire)</p>
+                <p>💣 <strong>Powder Kegs</strong> — Shoot to trigger chain explosions!</p>
+              </div>
+              <div class="howto-section">
+                <h3>King's Fleet &amp; Bosses</h3>
+                <p><span class="enemy-tag sloop">Sloop</span> — Fast agile scouts</p>
+                <p><span class="enemy-tag sow">Fire Galley</span> — Flame braziers</p>
+                <p><span class="enemy-tag ketch">Bomb Ketch</span> — Arcing high mortars</p>
+                <p><span class="enemy-tag boss">Flying Dutchman &amp; Leviathan</span> — Epic bosses every 5 waves!</p>
+              </div>
+            </div>
+          </section>
+
+          <!-- Pane 5: High Scores -->
+          <section id="tab-pane-scores" class="qd-pane">
+            <div class="pane-header">
+              <h2>Legendary Captains of the Lagoon</h2>
+              <p>Top survival records recorded in the Admiralty archives.</p>
+            </div>
+            <ol id="home-leaderboard-list" class="leaderboard-list"></ol>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <!-- How To Play -->
+    <div id="howto-modal" class="overlay hidden">
+      <div class="modal-content">
+        <h2>Captain's Orders</h2>
+        <div class="howto-grid">
+          <div class="howto-section">
+            <h3>Naval Navigation</h3>
+            <p><kbd>WASD</kbd> — Steer your vessel across open sea</p>
+            <p><kbd>Mouse</kbd> — Aim swivels &amp; ship heading</p>
+            <p><kbd>💨 Wind</kbd> — Sail with the wind for a tailwind speed boost!</p>
+          </div>
+          <div class="howto-section">
+            <h3>Broadsides &amp; Cannons</h3>
+            <p><kbd>Left Click</kbd> or <kbd>SPACE</kbd> — Bow Chaser volleys</p>
+            <p><kbd>Right Click</kbd> or <kbd>E</kbd> — <strong>Port &amp; Starboard Broadsides</strong> (Devastating flank fire!)</p>
+            <p><kbd>1 / 2 / 3</kbd> — Round (Hull) / Chain (Sails) / Grape (Crew)</p>
+          </div>
+          <div class="howto-section">
+            <h3>Floating Salvage</h3>
+            <p>💰 <strong>Treasure Chests</strong> — Score &amp; Combo bonus</p>
+            <p>⚓ <strong>Timber Planks</strong> — Instant +30 Hull Repair</p>
+            <p>⚡ <strong>Rum Cask</strong> — 8s Frenzy (Speed &amp; Rapid Fire)</p>
+            <p>💣 <strong>Powder Kegs</strong> — Shoot to trigger chain explosions!</p>
+          </div>
+          <div class="howto-section">
+            <h3>Naval Armada</h3>
+            <p><span class="enemy-tag sloop">Sloop</span> — Fast scouts, agile</p>
+            <p><span class="enemy-tag sow">Sloop-of-War</span> — Heavy brigantines</p>
+            <p><span class="enemy-tag ketch">Bomb Ketch</span> — Arcing high mortars</p>
+            <p><span class="enemy-tag boss">Flagship</span> — Multi-deck Boss Armada</p>
+          </div>
+        </div>
+        <button id="howto-close" class="menu-btn primary">UNDERSTOOD</button>
+      </div>
+    </div>
+
+    <!-- Gunsmith Armory Modal -->
+    <div id="armory-modal" class="overlay hidden">
+      <div class="modal-content armory-content">
+        <h2>Captain's Gunsmith &amp; Armory</h2>
+        <p class="armory-subtitle">Spend doubloons to forge and equip legendary naval ordnance</p>
+        <div class="armory-wallet">
+          <span>YOUR DOUBLOONS: </span><span id="armory-coins-display">🪙 0</span>
+        </div>
+        <div id="armory-grid" class="armory-grid">
+          <!-- Rendered dynamically -->
+        </div>
+        <button id="armory-close" class="menu-btn primary">RETURN TO BATTLE</button>
+      </div>
+    </div>
+
+    <!-- Leaderboard -->
+    <div id="leaderboard-modal" class="overlay hidden">
+      <div class="modal-content">
+        <h2>Legendary Captains</h2>
+        <ol id="leaderboard-list"></ol>
+        <button id="leaderboard-close" class="menu-btn primary">BACK</button>
+      </div>
+    </div>
+
+    <!-- Game Over -->
+    <div id="gameover-modal" class="overlay hidden">
+      <div class="modal-content gameover">
+        <h2 id="gameover-title">SHIP LOST</h2>
+        <p id="gameover-subtitle">The Black Pearl has been scuttled to the lagoon floor...</p>
+        <div class="final-stats">
+          <div class="stat"><span class="stat-label">Final Score</span><span id="final-score">0</span></div>
+          <div class="stat"><span class="stat-label">Waves Survived</span><span id="final-wave">0</span></div>
+          <div class="stat"><span class="stat-label">Ships Sunk</span><span id="final-kills">0</span></div>
+          <div class="stat"><span class="stat-label">Max Combo</span><span id="final-combo">×1</span></div>
+        </div>
+        <div id="new-highscore" class="new-highscore hidden">🏆 NEW HIGH SCORE!</div>
+        <button id="retry-btn" class="menu-btn primary">RAISE FROM THE DEPTHS</button>
+        <button id="menu-btn" class="menu-btn">MAIN MENU</button>
+      </div>
+    </div>
+
+    <!-- Pause -->
+    <div id="pause-modal" class="overlay hidden">
+      <div class="modal-content">
+        <h2>Battle Paused</h2>
+        <button id="resume-btn" class="menu-btn primary">RESUME</button>
+        <button id="pause-menu-btn" class="menu-btn">MAIN MENU</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/constants.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/particles.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/entities.js"></script>
+  <script src="js/renderer.js"></script>
+  <script src="js/waves.js"></script>
+  <script src="js/input.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

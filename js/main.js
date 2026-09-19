@@ -166,6 +166,7 @@ class Game {
         this.particles.emit(this.player.x, this.player.y, {
           count: 14, color: '#a78bfa', life: 800, speedMin: 1, speedMax: 3,
         });
+        this.floatingTexts.push(new FloatingText(this.player.x, this.player.y - 45, '⚓ REPAIRING HULL & SAILS', '#a78bfa', 18));
       }
     }
 
@@ -281,10 +282,20 @@ class Game {
           this.audio.play('loot');
           this.particles.emit(loot.x, loot.y, { count: 12, color: '#facc15', life: 600, speedMin: 1, speedMax: 4 });
         } else if (loot.type === 'wood') {
-          this.player.heal(30);
-          this.floatingTexts.push(new FloatingText(loot.x, loot.y - 25, '+30 HULL REPAIR', '#4ade80', 20));
+          this.player.heal(30, 30);
+          this.floatingTexts.push(new FloatingText(loot.x, loot.y - 25, '+30 HULL & SAILS', '#4ade80', 20));
           this.audio.play('loot');
           this.particles.emit(loot.x, loot.y, { count: 12, color: '#4ade80', life: 600, speedMin: 1, speedMax: 3 });
+        } else if (loot.type === 'crew') {
+          const gained = this.player.restoreCrew(25);
+          if (gained > 0) {
+            this.floatingTexts.push(new FloatingText(loot.x, loot.y - 25, `🧑‍✈️ +${gained} CREW RESCUED!`, '#38bdf8', 20));
+          } else {
+            this.score += 250;
+            this.floatingTexts.push(new FloatingText(loot.x, loot.y - 25, '+250 PTS (FULL COMPLEMENT)', '#38bdf8', 18));
+          }
+          this.audio.play('loot');
+          this.particles.emit(loot.x, loot.y, { count: 14, color: '#38bdf8', life: 650, speedMin: 1, speedMax: 3.5 });
         } else if (loot.type === 'rum') {
           this.player.rumFrenzyTimer = 8000;
           this.floatingTexts.push(new FloatingText(loot.x, loot.y - 25, '⚡ RUM FRENZY! (8s)', '#c084fc', 22));
@@ -488,7 +499,7 @@ class Game {
     ));
 
     // Spawn floating salvage loot drops!
-    const dropTypes = ['gold', 'gold', 'wood', 'rum', 'keg'];
+    const dropTypes = ['gold', 'gold', 'wood', 'crew', 'rum', 'keg'];
     const dropCount = enemy.isBoss ? 4 : enemy.isMiniBoss ? 2 : 1;
 
     for (let i = 0; i < dropCount; i++) {

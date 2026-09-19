@@ -766,16 +766,47 @@ class Renderer {
         ctx.fillText('💰', s.x, ly - 11);
 
       } else if (loot.type === 'wood') {
-        // Timber Planks (Repair)
+        // Timber Planks (Hull & Sails Repair)
         ctx.fillStyle = '#78350f';
         ctx.fillRect(s.x - 12, ly - 6, 24, 5);
         ctx.fillRect(s.x - 10, ly, 20, 5);
         ctx.strokeStyle = '#22c55e';
         ctx.lineWidth = 2;
-        ctx.font = 'bold 12px serif';
+        ctx.font = 'bold 11px serif';
         ctx.textAlign = 'center';
         ctx.fillStyle = '#22c55e';
-        ctx.fillText('⚓ +HP', s.x, ly - 10);
+        ctx.fillText('⚓ REPAIR', s.x, ly - 10);
+
+      } else if (loot.type === 'crew') {
+        // Castaway Raft / Survivors (+Crew)
+        const glow = ctx.createRadialGradient(s.x, ly, 2, s.x, ly, 24);
+        glow.addColorStop(0, 'rgba(56, 189, 248, 0.75)');
+        glow.addColorStop(1, 'transparent');
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(s.x, ly, 24, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Wooden Life Raft
+        ctx.fillStyle = '#854d0e';
+        ctx.beginPath();
+        ctx.ellipse(s.x, ly, 13, 8, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        // White life ring on raft
+        ctx.strokeStyle = '#f8fafc';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(s.x, ly, 4.5, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = 'bold 11px serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('🧑‍✈️ +CREW', s.x, ly - 11);
 
       } else if (loot.type === 'rum') {
         // Rum Cask (Frenzy)
@@ -860,13 +891,92 @@ class Renderer {
     ctx.textAlign = 'center';
     ctx.fillText('N', cx, cy - radius + 11);
 
-    // Wind indicator on compass rim
+    // Wind indicator on compass rim and tactical HUD chip
     const windAngle = Math.atan2(wind.y, wind.x);
-    const wx = cx + Math.cos(windAngle) * (radius - 12);
-    const wy = cy + Math.sin(windAngle) * (radius - 12);
-    ctx.fillStyle = '#38bdf8';
-    ctx.font = 'bold 9px sans-serif';
-    ctx.fillText('💨', wx, wy + 3);
+    const hasTailwind = player && player.alive && (player.windDot > 0.1);
+
+    // 1. Aerodynamic wind vector arrow on the compass rim
+    const arrowDist = radius - 10;
+    const wx = cx + Math.cos(windAngle) * arrowDist;
+    const wy = cy + Math.sin(windAngle) * arrowDist;
+
+    ctx.save();
+    ctx.translate(wx, wy);
+    ctx.rotate(windAngle);
+    ctx.fillStyle = hasTailwind ? '#4ade80' : '#38bdf8';
+    ctx.shadowColor = hasTailwind ? '#22c55e' : '#38bdf8';
+    ctx.shadowBlur = 8;
+    ctx.beginPath();
+    ctx.moveTo(8, 0);
+    ctx.lineTo(-6, -5);
+    ctx.lineTo(-3, 0);
+    ctx.lineTo(-6, 5);
+    ctx.closePath();
+    ctx.fill();
+
+    // Streamer lines trailing behind the wind arrow
+    ctx.strokeStyle = hasTailwind ? 'rgba(74, 222, 128, 0.7)' : 'rgba(56, 189, 248, 0.7)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(-5, -2); ctx.lineTo(-13, -2);
+    ctx.moveTo(-5, 2); ctx.lineTo(-11, 2);
+    ctx.stroke();
+    ctx.restore();
+
+    // 2. Tactical Wind Badge directly below the minimap
+    const badgeW = 130;
+    const badgeH = 22;
+    const badgeX = cx - badgeW / 2;
+    const badgeY = cy + radius + 8;
+
+    ctx.save();
+    ctx.beginPath();
+    if (ctx.roundRect) {
+      ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 6);
+    } else {
+      ctx.rect(badgeX, badgeY, badgeW, badgeH);
+    }
+    ctx.fillStyle = hasTailwind ? 'rgba(6, 36, 24, 0.94)' : 'rgba(6, 18, 36, 0.94)';
+    ctx.fill();
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = hasTailwind ? '#22c55e' : 'rgba(201, 162, 39, 0.55)';
+    ctx.shadowColor = hasTailwind ? '#22c55e' : 'rgba(0, 0, 0, 0.5)';
+    ctx.shadowBlur = hasTailwind ? 10 : 4;
+    ctx.stroke();
+
+    // Label: 💨 WIND
+    ctx.font = 'bold 9px Cinzel, serif';
+    ctx.fillStyle = hasTailwind ? '#86efac' : '#fde047';
+    ctx.textAlign = 'left';
+    ctx.fillText('💨 WIND', badgeX + 7, badgeY + 15);
+
+    // Rotating Arrow in dial
+    const dialX = badgeX + 57;
+    const dialY = badgeY + badgeH / 2;
+    ctx.save();
+    ctx.translate(dialX, dialY);
+    ctx.rotate(windAngle);
+    ctx.fillStyle = hasTailwind ? '#4ade80' : '#38bdf8';
+    ctx.beginPath();
+    ctx.moveTo(6, 0);
+    ctx.lineTo(-4, -3.5);
+    ctx.lineTo(-1.5, 0);
+    ctx.lineTo(-4, 3.5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+
+    // Tailwind Boost Indicator
+    ctx.font = 'bold 8.5px Cinzel, serif';
+    ctx.textAlign = 'right';
+    if (hasTailwind) {
+      ctx.fillStyle = '#4ade80';
+      ctx.fillText('+25% BOOST', badgeX + badgeW - 6, badgeY + 15);
+    } else {
+      ctx.fillStyle = '#94a3b8';
+      ctx.fillText('STEER ➔ TAILWIND', badgeX + badgeW - 6, badgeY + 15);
+    }
+    ctx.restore();
 
     // 2. Obstacles / Islands
     for (const obs of obstacles) {
@@ -883,7 +993,7 @@ class Renderer {
       if (!loot.alive) continue;
       const lx = cx + loot.x * scale;
       const ly = cy + loot.y * scale;
-      ctx.fillStyle = loot.type === 'keg' ? '#ef4444' : '#facc15';
+      ctx.fillStyle = loot.type === 'keg' ? '#ef4444' : loot.type === 'crew' ? '#38bdf8' : loot.type === 'wood' ? '#4ade80' : loot.type === 'rum' ? '#c084fc' : '#facc15';
       ctx.fillRect(lx - 2, ly - 2, 4, 4);
     }
 
@@ -905,12 +1015,16 @@ class Renderer {
       ctx.save();
       ctx.translate(px, py);
       ctx.rotate(player.angle);
-      ctx.fillStyle = '#22d3ee';
+      ctx.fillStyle = hasTailwind ? '#4ade80' : '#22d3ee';
+      if (hasTailwind) {
+        ctx.shadowColor = '#22c55e';
+        ctx.shadowBlur = 6;
+      }
       ctx.beginPath();
-      ctx.moveTo(6, 0);
-      ctx.lineTo(-4, -4);
-      ctx.lineTo(-2, 0);
-      ctx.lineTo(-4, 4);
+      ctx.moveTo(7, 0);
+      ctx.lineTo(-5, -4);
+      ctx.lineTo(-2.5, 0);
+      ctx.lineTo(-5, 4);
       ctx.closePath();
       ctx.fill();
       ctx.restore();

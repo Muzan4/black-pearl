@@ -313,7 +313,9 @@ class Player {
 
     if (this.repairing) {
       this.repairTimer -= dt;
-      this.hull = clamp(this.hull + (this.repairAmount / PLAYER.repairDuration) * dt, 0, this.maxHull);
+      const repairRate = (this.repairAmount / PLAYER.repairDuration) * dt;
+      this.hull = clamp(this.hull + repairRate, 0, this.maxHull);
+      this.sail = clamp(this.sail + repairRate, 0, this.maxSail);
       if (this.repairTimer <= 0) {
         this.repairing = false;
         this.repairCooldown = this.repairCooldownMax || PLAYER.repairCooldown;
@@ -341,6 +343,7 @@ class Player {
       const wx = wind.x / windLen;
       const wy = wind.y / windLen;
       const windDot = mx * wx + my * wy;
+      this.windDot = windDot;
       if (windDot > 0.1) {
         moveSpeed *= (1 + windDot * 0.25);
       }
@@ -359,6 +362,7 @@ class Player {
       const wx = wind.x / windLen;
       const wy = wind.y / windLen;
       const windDot = hx * wx + hy * wy;
+      this.windDot = windDot;
       if (windDot > 0.1) {
         moveSpeed *= (1 + windDot * 0.25);
       }
@@ -368,6 +372,7 @@ class Player {
       this.vx = hx * moveSpeed;
       this.vy = hy * moveSpeed;
     } else {
+      this.windDot = 0;
       this.vx = 0;
       this.vy = 0;
     }
@@ -481,7 +486,7 @@ class Player {
   }
 
   startRepair() {
-    if (this.repairCooldown > 0 || this.repairing || this.hull >= this.maxHull) return false;
+    if (this.repairCooldown > 0 || this.repairing || (this.hull >= this.maxHull && this.sail >= this.maxSail)) return false;
     this.repairing = true;
     this.repairTimer = PLAYER.repairDuration;
     return true;
@@ -496,8 +501,15 @@ class Player {
     if (this.hull <= 0) this.alive = false;
   }
 
-  heal(hullAmt) {
+  heal(hullAmt, sailAmt = hullAmt) {
     this.hull = clamp(this.hull + hullAmt, 0, this.maxHull);
+    this.sail = clamp(this.sail + sailAmt, 0, this.maxSail);
+  }
+
+  restoreCrew(amount) {
+    const before = this.crew;
+    this.crew = clamp(this.crew + amount, 0, this.maxCrew);
+    return Math.round(this.crew - before);
   }
 
   unlockGun(wave) {

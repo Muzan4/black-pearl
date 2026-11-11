@@ -12,7 +12,8 @@ class InputManager {
       broadsidePressed: false,
       repairPressed: false,
       pausePressed: false,
-      drift: false,
+      shield: false,
+      shieldPressed: false,
       harpoonPressed: false,
       ammoSwitch: null,
       targetX: 0,
@@ -73,6 +74,9 @@ class InputManager {
     if (e.code === 'KeyE' || e.code === 'KeyQ') {
       this.state.broadsidePressed = true;
     }
+    if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+      this.state.shieldPressed = true;
+    }
     if (e.code === 'KeyF') {
       this.state.harpoonPressed = true;
     }
@@ -113,6 +117,7 @@ class InputManager {
     const repairBtn = document.getElementById('repair-btn');
     const broadsideBtn = document.getElementById('broadside-btn');
     const harpoonBtn = document.getElementById('harpoon-btn');
+    const shieldBtn = document.getElementById('shield-btn');
     if (!zone) return;
 
     let touchId = null;
@@ -179,6 +184,11 @@ class InputManager {
       this.state.harpoonPressed = true;
     }, { passive: false });
 
+    shieldBtn?.addEventListener('touchstart', e => {
+      e.preventDefault();
+      this.state.shieldPressed = true;
+    }, { passive: false });
+
     repairBtn?.addEventListener('touchstart', e => {
       e.preventDefault();
       this.state.repairPressed = true;
@@ -218,8 +228,9 @@ class InputManager {
     // Fire chasers
     s.fire = !!(this.keys['Space'] || this.mouse.down);
 
-    // Anchor drift toggle (Shift key)
-    s.drift = !!(this.keys['ShiftLeft'] || this.keys['ShiftRight']);
+    // Barrier Shield trigger (Shift key)
+    s.shield = s.shieldPressed || !!(this.keys['ShiftLeft'] || this.keys['ShiftRight']);
+    s.shieldPressed = false;
 
     // Broadside trigger
     s.broadside = s.broadsidePressed || this.mouse.rightDown;

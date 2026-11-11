@@ -227,6 +227,72 @@ html, body {
   transition: width 0.1s linear;
 }
 
+.shield-panel {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: linear-gradient(180deg, rgba(10,25,35,0.95), rgba(5,15,25,0.98));
+  border: 2px solid #0369a1;
+  border-radius: 6px;
+  padding: 0.45rem 0.9rem;
+  color: var(--parchment);
+  cursor: pointer;
+  transition: all 0.25s;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+}
+
+.shield-panel.ready {
+  border-color: #38bdf8;
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.4);
+  animation: pulseShieldReady 1.8s infinite;
+}
+
+.shield-panel.active {
+  border-color: #06b6d4;
+  background: linear-gradient(180deg, rgba(6,182,212,0.25), rgba(8,145,178,0.3));
+  box-shadow: 0 0 22px rgba(6, 182, 212, 0.8);
+}
+
+@keyframes pulseShieldReady {
+  0%, 100% { box-shadow: 0 0 12px rgba(56, 189, 248, 0.3); }
+  50% { box-shadow: 0 0 20px rgba(56, 189, 248, 0.7); }
+}
+
+.shield-icon {
+  font-size: 1.3rem;
+  color: #38bdf8;
+}
+
+.shield-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.shield-name {
+  font-family: 'Cinzel', serif;
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  color: #7dd3fc;
+}
+
+.shield-bar-track {
+  width: 90px;
+  height: 5px;
+  background: rgba(0,0,0,0.6);
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+}
+
+.shield-bar-fill {
+  height: 100%;
+  width: var(--cd, 100%);
+  background: linear-gradient(90deg, #0284c7, #38bdf8);
+  transition: width 0.1s linear;
+}
+
 .ammo-btn {
   background: linear-gradient(180deg, rgba(30,25,15,0.9), rgba(15,12,8,0.95));
   border: 2px solid var(--gold-dark);
@@ -456,6 +522,16 @@ html, body {
   background: radial-gradient(circle, #0284c7, #0369a1);
   font-size: 0.6rem;
   box-shadow: 0 0 15px rgba(2, 132, 199, 0.4);
+}
+
+.shield-btn {
+  bottom: 8.5rem;
+  right: 12.5rem;
+  width: 64px;
+  height: 64px;
+  background: radial-gradient(circle, #0284c7, #075985);
+  font-size: 0.6rem;
+  box-shadow: 0 0 16px rgba(2, 132, 199, 0.4);
 }
 
 .touch-ammo {

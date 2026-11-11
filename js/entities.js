@@ -211,8 +211,12 @@ class Player {
     this.vx = 0;
     this.vy = 0;
     this.speedMag = 0;
-    this.isDrifting = false;
-    this.driftAngleVel = 0;
+    this.shieldActive = false;
+    this.shieldDuration = 0;
+    this.maxShieldDuration = 4000;
+    this.shieldCooldown = 0;
+    this.maxShieldCooldown = 10000;
+    this.shieldHitPulse = 0;
     this.broadsideCooldown = 0;
     this.maxBroadsideCooldown = 3200;
     this.harpoonCooldown = 0;
@@ -385,6 +389,17 @@ class Player {
     if (this.harpoonCooldown > 0) this.harpoonCooldown -= dt;
     if (this.rumFrenzyTimer > 0) this.rumFrenzyTimer -= dt;
 
+    if (this.shieldCooldown > 0) this.shieldCooldown -= dt;
+    if (this.shieldDuration > 0) {
+      this.shieldDuration -= dt;
+      if (this.shieldDuration <= 0) {
+        this.shieldActive = false;
+      }
+    }
+    if (this.shieldHitPulse > 0) {
+      this.shieldHitPulse = Math.max(0, this.shieldHitPulse - dt * 0.005);
+    }
+
     if (this.broadsideRecoil > 0) this.broadsideRecoil = Math.max(0, this.broadsideRecoil - dt * 0.005);
     if (this.chaserRecoil > 0) this.chaserRecoil = Math.max(0, this.chaserRecoil - dt * 0.006);
 
@@ -407,7 +422,7 @@ class Player {
       return;
     }
 
-    // Direct WASD movement with Anchor Drift mechanic
+    // Direct WASD naval steering
     let mx = 0;
     let my = 0;
     if (input.up) my -= 1;
@@ -417,7 +432,6 @@ class Player {
 
     let moveSpeed = this.effectiveSpeed;
     const isMoving = mx !== 0 || my !== 0;
-    this.isDrifting = !!input.drift;
 
     if (isMoving) {
       const len = Math.hypot(mx, my);
@@ -431,11 +445,6 @@ class Player {
       const windDot = mx * wx + my * wy;
       if (windDot > 0.1) {
         moveSpeed *= (1 + windDot * 0.3);
-      }
-
-      // If drifting, reduce linear speed slightly to convert into intense angular rudder slide
-      if (this.isDrifting) {
-        moveSpeed *= 0.65;
       }
 
       this.x += mx * moveSpeed * step;
@@ -459,14 +468,8 @@ class Player {
     }
 
     const diff = angleDiff(this.angle, this.targetAngle);
-    let turnRateBase = (this.shipDef?.turnRate ? this.shipDef.turnRate * 3.6 : 0.16);
+    const turnRateBase = (this.shipDef?.turnRate ? this.shipDef.turnRate * 3.6 : 0.16);
     const navTurnBonus = 1 + (this.crewUpgrades?.navigator ? (this.crewUpgrades.navigator - 1) * 0.18 : 0);
-
-    // Anchor Drift multiplies turn rate by 2.6x for extreme sharp whip turns!
-    if (this.isDrifting) {
-      turnRateBase *= 2.6;
-    }
-
     this.angle += diff * Math.min(1, turnRateBase * navTurnBonus * step);
 
     const wrapped = wrapWorld(this.x, this.y);
@@ -565,13 +568,35 @@ class Player {
     return true;
   }
 
+  canActivateShield() {
+    return this.alive && this.shieldCooldown <= 0;
+  }
+
+  activateShield() {
+    if (!this.canActivateShield()) return false;
+    this.shieldActive = true;
+    this.shieldDuration = this.maxShieldDuration;
+    this.shieldCooldown = this.maxShieldCooldown;
+    this.shieldHitPulse = 0.5;
+    return true;
+  }
+
   takeDamage(hullDmg, sailDmg, crewDmg) {
-    if (this.invuln > 0) return;
+    if (this.invuln > 0) return { blocked: false, finalHullDmg: 0 };
+    let blocked = false;
+    if (this.shieldActive) {
+      hullDmg *= 0.40; // Blocks 60% of damage!
+      sailDmg *= 0.40;
+      crewDmg *= 0.40;
+      this.shieldHitPulse = 1.0;
+      blocked = true;
+    }
     this.hull = clamp(this.hull - hullDmg, 0, this.maxHull);
     this.sail = clamp(this.sail - sailDmg, 0, this.maxSail);
     this.crew = clamp(this.crew - crewDmg, 0, this.maxCrew);
     this.invuln = 280;
     if (this.hull <= 0) this.alive = false;
+    return { blocked, finalHullDmg: hullDmg };
   }
 
   heal(hullAmt) {

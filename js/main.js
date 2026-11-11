@@ -161,13 +161,17 @@ class Game {
     if (this.player.alive && (this.player.vx !== 0 || this.player.vy !== 0)) {
       this.particles.wake(this.player.x, this.player.y, this.player.angle, this.player.speedMag);
       this.particles.bowSpray(this.player.x, this.player.y, this.player.angle, this.player.speedMag);
+    }
 
-      if (this.player.isDrifting) {
-        this.particles.bowSpray(this.player.x, this.player.y, this.player.angle, 6);
-        if (Math.random() < 0.12) {
-          this.audio.play('drift');
-          this.renderer.shake(1.8);
-        }
+    // Barrier Shield activation (Shift key)
+    if (input.shield && this.player.canActivateShield()) {
+      if (this.player.activateShield()) {
+        this.audio.play('shield');
+        this.renderer.shake(3);
+        this.particles.emit(this.player.x, this.player.y, {
+          count: 24, speedMin: 2, speedMax: 6, life: 500, sizeMin: 3, sizeMax: 7, color: '#38bdf8',
+        });
+        this.floatingTexts.push(new FloatingText(this.player.x, this.player.y - 35, '🛡️ BARRIER SHIELD (60% DEF)', '#38bdf8', 22));
       }
     }
 
@@ -305,6 +309,16 @@ class Game {
       bsIndicator.classList.toggle('ready', ready);
       const ratio = Math.max(0, 1 - this.player.broadsideCooldown / this.player.maxBroadsideCooldown);
       bsIndicator.style.setProperty('--cd', `${ratio * 100}%`);
+    }
+
+    // Update Shield HUD
+    const shieldIndicator = document.getElementById('shield-indicator');
+    if (shieldIndicator) {
+      const ready = this.player.shieldCooldown <= 0;
+      shieldIndicator.classList.toggle('ready', ready);
+      shieldIndicator.classList.toggle('active', this.player.shieldActive);
+      const ratio = this.player.shieldCooldown <= 0 ? 1 : Math.max(0, 1 - this.player.shieldCooldown / this.player.maxShieldCooldown);
+      shieldIndicator.style.setProperty('--cd', `${ratio * 100}%`);
     }
   }
 
@@ -471,11 +485,20 @@ class Game {
         const d = Math.hypot(p.x - this.player.x, p.y - this.player.y);
         const hitDist = p.isMortar ? 48 : (PLAYER.size * 0.88);
         if (d < hitDist && (!p.isMortar || p.z < 8)) {
-          this.player.takeDamage(p.ammo.hullDmg, p.ammo.sailDmg, p.ammo.crewDmg);
+          const res = this.player.takeDamage(p.ammo.hullDmg, p.ammo.sailDmg, p.ammo.crewDmg);
           p.alive = false;
-          this.particles.damage(this.player.x, this.player.y);
-          this.audio.play('hit');
-          this.renderer.shake(5);
+          if (res?.blocked) {
+            this.audio.play('deflect');
+            this.renderer.shake(3);
+            this.particles.emit(this.player.x, this.player.y, {
+              count: 14, speedMin: 2, speedMax: 5, life: 350, sizeMin: 2, sizeMax: 5, color: '#38bdf8',
+            });
+            this.floatingTexts.push(new FloatingText(this.player.x, this.player.y - 25, '🛡️ -60% DEFLECTED', '#38bdf8', 19));
+          } else {
+            this.particles.damage(this.player.x, this.player.y);
+            this.audio.play('hit');
+            this.renderer.shake(5);
+          }
           if (!this.player.alive) {
             this.particles.explosion(this.player.x, this.player.y, 2.5);
             this.audio.play('death');

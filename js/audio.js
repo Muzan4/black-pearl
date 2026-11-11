@@ -101,6 +101,8 @@ class AudioManager {
       case 'harpoon': this._harpoon(); break;
       case 'sink': this._sink(); break;
       case 'lightning': this._lightning(); break;
+      case 'shield': this._shield(); break;
+      case 'deflect': this._deflect(); break;
     }
   }
 
@@ -511,5 +513,39 @@ class AudioManager {
     g.connect(this.masterGain);
     osc.start(t0);
     osc.stop(t0 + 0.07);
+  }
+
+  _shield() {
+    const t0 = this.ctx.currentTime;
+    // Resonant shimmering shield activation hum
+    [261.63, 392.00, 523.25, 783.99].forEach((freq, idx) => {
+      const osc = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq * 0.8, t0 + idx * 0.03);
+      osc.frequency.exponentialRampToValueAtTime(freq * 1.2, t0 + idx * 0.03 + 0.4);
+      g.gain.setValueAtTime(0.25, t0 + idx * 0.03);
+      g.gain.exponentialRampToValueAtTime(0.001, t0 + idx * 0.03 + 0.55);
+      osc.connect(g);
+      g.connect(this.masterGain);
+      osc.start(t0 + idx * 0.03);
+      osc.stop(t0 + idx * 0.03 + 0.6);
+    });
+  }
+
+  _deflect() {
+    const t0 = this.ctx.currentTime;
+    // High-pitched crystal energy deflection ping
+    const osc = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(1200, t0);
+    osc.frequency.exponentialRampToValueAtTime(400, t0 + 0.22);
+    g.gain.setValueAtTime(0.4, t0);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.25);
+    osc.connect(g);
+    g.connect(this.masterGain);
+    osc.start(t0);
+    osc.stop(t0 + 0.28);
   }
 }

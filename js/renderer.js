@@ -944,21 +944,23 @@ class Renderer {
     if (s.x < -50 || s.x > w + 50 || s.y < -50 || s.y > h + 50) return;
 
     const isPlayer = p.owner === 'player';
-    const radius = p.ammoType === 'grape' ? 5 : (p.isBroadside ? 8.5 : 7);
-    const glow = (isPlayer && p.gun?.color) ? p.gun.color : (p.ammo?.glow || (isPlayer ? '#ffaa00' : '#ff4444'));
-    const trailColor = (isPlayer && p.gun?.color) ? p.gun.color : (p.ammo?.trail || glow);
+    const isChain = p.ammoType === 'chain';
+    const isGrape = p.ammoType === 'grape';
+    const isRound = !isChain && !isGrape;
+
+    const radius = isGrape ? 5 : (isChain ? 7 : (p.isBroadside ? 11 : 9));
+    const glow = isChain ? '#fbbf24' : (isGrape ? '#ef4444' : (p.gun?.color || '#f97316'));
+    const trailColor = isChain ? '#fde047' : (isGrape ? '#ef4444' : (p.gun?.color || '#fdba74'));
 
     // 1. MORTAR HIGH BALLISTICS (Parabolic height with ground shadow)
     if (p.isMortar) {
       ctx.save();
-      // Ground shadow on water
       ctx.fillStyle = 'rgba(2, 10, 20, 0.6)';
       const shadowR = Math.max(3, radius * (1 - p.z / 90));
       ctx.beginPath();
       ctx.ellipse(s.x, s.y, shadowR * 1.4, shadowR * 0.8, 0, 0, Math.PI * 2);
       ctx.fill();
 
-      // Elevated bomb
       const ballY = s.y - p.z;
       const scale = 1 + p.z * 0.018;
 
@@ -981,255 +983,423 @@ class Renderer {
       return;
     }
 
-    // 2. UNIQUE BULLET TYPE ARTWORK & ANIMATIONS
     const bType = p.gun?.bulletType || (p.owner === 'player' ? 'iron' : (p.ammo?.isGhost ? 'ghost' : (p.ammo?.isFire ? 'fire' : 'iron')));
     const pAngle = Math.atan2(p.vy, p.vx);
 
-    // Dynamic Motion Trail
+    // 2. BESPOKE DYNAMIC MOTION TRAILS FOR 1, 2, AND 3
     if (p.trail && p.trail.length > 1) {
       ctx.save();
-      for (let i = 1; i < p.trail.length; i++) {
-        const a = this._worldToScreen(p.trail[i - 1].x, p.trail[i - 1].y, camera);
-        const b = this._worldToScreen(p.trail[i].x, p.trail[i].y, camera);
-        const alpha = (i / p.trail.length) * 0.8;
-        ctx.strokeStyle = trailColor;
-        ctx.globalAlpha = alpha;
-        ctx.lineWidth = radius * (0.35 + alpha * 0.7);
+
+      if (isChain) {
+        // --- CHAIN SHOT: DUAL INTERWOVEN SPIRAL HELIX WAKE ---
+        const armDist = 15;
+        // Trail 1 (Weight A)
+        ctx.strokeStyle = '#facc15';
         ctx.lineCap = 'round';
-        ctx.beginPath();
-        ctx.moveTo(a.x, a.y);
-        ctx.lineTo(b.x, b.y);
-        ctx.stroke();
+        for (let i = 1; i < p.trail.length; i++) {
+          const pt0 = p.trail[i - 1];
+          const pt1 = p.trail[i];
+          const s0 = this._worldToScreen(pt0.x, pt0.y, camera);
+          const s1 = this._worldToScreen(pt1.x, pt1.y, camera);
+          const sp0 = pt0.spin || 0;
+          const sp1 = pt1.spin || 0;
+          const a = (i / p.trail.length);
+
+          const x0a = s0.x + Math.cos(sp0) * armDist;
+          const y0a = s0.y + Math.sin(sp0) * armDist;
+          const x1a = s1.x + Math.cos(sp1) * armDist;
+          const y1a = s1.y + Math.sin(sp1) * armDist;
+
+          ctx.globalAlpha = a * 0.75;
+          ctx.lineWidth = 2.2 * a;
+          ctx.beginPath();
+          ctx.moveTo(x0a, y0a);
+          ctx.lineTo(x1a, y1a);
+          ctx.stroke();
+
+          // Trail 2 (Weight B)
+          const x0b = s0.x - Math.cos(sp0) * armDist;
+          const y0b = s0.y - Math.sin(sp0) * armDist;
+          const x1b = s1.x - Math.cos(sp1) * armDist;
+          const y1b = s1.y - Math.sin(sp1) * armDist;
+
+          ctx.beginPath();
+          ctx.moveTo(x0b, y0b);
+          ctx.lineTo(x1b, y1b);
+          ctx.stroke();
+        }
+
+      } else if (isGrape) {
+        // --- GRAPESHOT: INCANDESCENT CRIMSON & WHITE-HOT TRACER STREAM ---
+        for (let i = 1; i < p.trail.length; i++) {
+          const a = this._worldToScreen(p.trail[i - 1].x, p.trail[i - 1].y, camera);
+          const b = this._worldToScreen(p.trail[i].x, p.trail[i].y, camera);
+          const alpha = (i / p.trail.length);
+
+          // Outer red flame blur
+          ctx.strokeStyle = '#ef4444';
+          ctx.globalAlpha = alpha * 0.85;
+          ctx.lineWidth = 4 * alpha;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
+          ctx.stroke();
+
+          // Inner white-hot tracer thread
+          ctx.strokeStyle = '#fef08a';
+          ctx.globalAlpha = alpha * 0.95;
+          ctx.lineWidth = 1.8 * alpha;
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
+          ctx.stroke();
+        }
+
+      } else {
+        // --- ROUND SHOT: HEAVY BILLOWING GUNPOWDER SMOKE & FIRE JET ---
+        for (let i = 1; i < p.trail.length; i++) {
+          const a = this._worldToScreen(p.trail[i - 1].x, p.trail[i - 1].y, camera);
+          const b = this._worldToScreen(p.trail[i].x, p.trail[i].y, camera);
+          const alpha = (i / p.trail.length);
+
+          // Gunpowder smoke haze
+          ctx.strokeStyle = 'rgba(71, 85, 105, 0.45)';
+          ctx.globalAlpha = alpha * 0.65;
+          ctx.lineWidth = radius * (0.8 + alpha * 1.2);
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
+          ctx.stroke();
+
+          // Hot fire/ember core
+          ctx.strokeStyle = trailColor;
+          ctx.globalAlpha = alpha * 0.85;
+          ctx.lineWidth = radius * (0.3 + alpha * 0.5);
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
+          ctx.stroke();
+        }
       }
+
       ctx.restore();
     }
 
     ctx.save();
     ctx.translate(s.x, s.y);
-    ctx.rotate(pAngle);
 
-    if (bType === 'sniper') {
-      // --- LONG NINE SNIPER: PIERCING CYAN LASER BOLT ---
-      ctx.shadowColor = '#38bdf8';
-      ctx.shadowBlur = 16;
+    // 3. BESPOKE BULLET VISUALS FOR AMMO 1, 2, AND 3
+    if (isChain) {
+      // =========================================================================
+      // [2] CHAIN SHOT: PROMINENT WHIRLING LINKED TWIN SPIKED WEIGHTS (32px wide)
+      // =========================================================================
+      const spinAngle = (p.spin !== undefined ? p.spin : (Date.now() * 0.022)) + p.id * 1.5;
+      ctx.rotate(spinAngle);
 
-      // Supersonic shockwave cone
-      ctx.strokeStyle = 'rgba(56, 189, 248, 0.45)';
-      ctx.lineWidth = 2;
+      const armDist = 16; // 32px between the two heavy weights!
+
+      // Spinning aerodynamic motion blur crescent / disc
+      ctx.fillStyle = 'rgba(250, 204, 21, 0.16)';
       ctx.beginPath();
-      ctx.moveTo(-16, -7); ctx.lineTo(10, 0); ctx.lineTo(-16, 7);
-      ctx.stroke();
-
-      // Glowing needle-sharp diamond head
-      ctx.fillStyle = '#38bdf8';
-      ctx.beginPath();
-      ctx.moveTo(14, 0); ctx.lineTo(-6, -4.5); ctx.lineTo(-12, 0); ctx.lineTo(-6, 4.5);
-      ctx.closePath();
+      ctx.arc(0, 0, armDist + 6, 0, Math.PI * 2);
       ctx.fill();
 
-      // Blazing white laser core
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.moveTo(12, 0); ctx.lineTo(-4, -2); ctx.lineTo(-8, 0); ctx.lineTo(-4, 2);
-      ctx.closePath();
-      ctx.fill();
-
-    } else if (bType === 'lightning') {
-      // --- POSEIDON TEMPEST ARC: ELECTRIC LIGHTNING ORB ---
-      ctx.shadowColor = '#06b6d4';
-      ctx.shadowBlur = 18;
-
-      // Crackling plasma sphere
-      const pGrad = ctx.createRadialGradient(0, 0, 1, 0, 0, radius * 1.5);
-      pGrad.addColorStop(0, '#ffffff');
-      pGrad.addColorStop(0.5, '#67e8f9');
-      pGrad.addColorStop(1, 'rgba(6, 182, 212, 0)');
-      ctx.fillStyle = pGrad;
-      ctx.beginPath();
-      ctx.arc(0, 0, radius * 1.5, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Branching electric lightning arcs
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1.6;
-      for (let arc = 0; arc < 4; arc++) {
-        const a1 = (arc / 4) * Math.PI * 2 + (Date.now() * 0.02);
-        const l1 = radius * 1.6;
-        const mx = Math.cos(a1) * (l1 * 0.5) + (Math.random() - 0.5) * 5;
-        const my = Math.sin(a1) * (l1 * 0.5) + (Math.random() - 0.5) * 5;
-        ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.lineTo(mx, my);
-        ctx.lineTo(Math.cos(a1) * l1, Math.sin(a1) * l1);
-        ctx.stroke();
-      }
-
-    } else if (bType === 'kraken') {
-      // --- KRAKEN ABYSSAL TORMENTOR: ELDRITCH VOID VORTEX ---
-      ctx.shadowColor = '#a855f7';
-      ctx.shadowBlur = 18;
-
-      // Swirling purple shadow sphere
-      const vGrad = ctx.createRadialGradient(0, 0, 1, 0, 0, radius * 1.6);
-      vGrad.addColorStop(0, '#1e1b4b');
-      vGrad.addColorStop(0.6, '#7e22ce');
-      vGrad.addColorStop(1, 'rgba(168, 85, 247, 0)');
-      ctx.fillStyle = vGrad;
-      ctx.beginPath();
-      ctx.arc(0, 0, radius * 1.6, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Orbiting dark void tendrils
-      const vRot = Date.now() * 0.008;
-      ctx.strokeStyle = '#c084fc';
-      ctx.lineWidth = 2.2;
-      for (let t = 0; t < 3; t++) {
-        const ta = vRot + (t / 3) * Math.PI * 2;
-        ctx.beginPath();
-        ctx.arc(0, 0, radius * 0.9, ta, ta + 1.2);
-        ctx.stroke();
-      }
-
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.arc(0, 0, 2.5, 0, Math.PI * 2);
-      ctx.fill();
-
-    } else if (bType === 'infernal') {
-      // --- INFERNAL DREAD-FORGE: APOCALYPTIC DEMON SKULL ---
-      ctx.shadowColor = '#ef4444';
-      ctx.shadowBlur = 20;
-
-      // Fiery hellfire halo
-      const hGrad = ctx.createRadialGradient(0, 0, 2, 0, 0, radius * 2.0);
-      hGrad.addColorStop(0, '#fef08a');
-      hGrad.addColorStop(0.5, '#f97316');
-      hGrad.addColorStop(1, 'rgba(239, 68, 68, 0)');
-      ctx.fillStyle = hGrad;
-      ctx.beginPath();
-      ctx.arc(0, 0, radius * 2.0, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Carved molten demon skull
-      ctx.fillStyle = '#450a0a';
-      ctx.beginPath();
-      ctx.arc(0, -1, radius * 0.85, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillRect(-radius * 0.45, 0, radius * 0.9, radius * 0.75);
-
-      // Glowing red eyes
-      ctx.fillStyle = '#fef08a';
-      ctx.fillRect(-radius * 0.35, -radius * 0.2, 2.5, 2.5);
-      ctx.fillRect(radius * 0.15, -radius * 0.2, 2.5, 2.5);
-
-    } else if (bType === 'magma') {
-      // --- VOLCANIC MAGMA: MOLTEN LAVA BOMB ---
-      ctx.shadowColor = '#f97316';
-      ctx.shadowBlur = 16;
-
-      const mGrad = ctx.createRadialGradient(0, 0, 2, 0, 0, radius * 1.5);
-      mGrad.addColorStop(0, '#fef08a');
-      mGrad.addColorStop(0.5, '#ea580c');
-      mGrad.addColorStop(0.85, '#7c2d12');
-      mGrad.addColorStop(1, 'rgba(124, 45, 18, 0)');
-      ctx.fillStyle = mGrad;
-      ctx.beginPath();
-      ctx.arc(0, 0, radius * 1.5, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Black crust spots on molten lava
-      ctx.fillStyle = '#1c1917';
-      ctx.beginPath();
-      ctx.arc(-radius * 0.3, -radius * 0.2, 2.5, 0, Math.PI * 2);
-      ctx.arc(radius * 0.2, radius * 0.3, 2, 0, Math.PI * 2);
-      ctx.fill();
-
-    } else if (bType === 'smasher') {
-      // --- CARRONADE SMASHER: 3 TUMBLING JAGGED IRON SLUGS ---
-      const rot = Date.now() * 0.01;
-      ctx.fillStyle = '#334155';
-      ctx.strokeStyle = '#94a3b8';
-      ctx.lineWidth = 1;
-
-      for (let sIdx = 0; sIdx < 3; sIdx++) {
-        const sa = rot + (sIdx / 3) * Math.PI * 2;
-        const sx = Math.cos(sa) * 4;
-        const sy = Math.sin(sa) * 4;
-        ctx.fillRect(sx - 3, sy - 3, 6, 6);
-        ctx.strokeRect(sx - 3, sy - 3, 6, 6);
-      }
-
-    } else if (bType === 'bronze') {
-      // --- BRONZE 12-POUNDER: BURNISHED HEAVY NAVAL BALL ---
-      ctx.shadowColor = '#f59e0b';
+      // Outer golden energy aura
+      ctx.shadowColor = bType === 'sniper' ? '#38bdf8' : (bType === 'lightning' ? '#06b6d4' : '#fbbf24');
       ctx.shadowBlur = 14;
 
-      const brGrad = ctx.createRadialGradient(-radius * 0.35, -radius * 0.35, 0, 0, 0, radius);
-      brGrad.addColorStop(0, '#fef3c7');
-      brGrad.addColorStop(0.5, '#d97706');
-      brGrad.addColorStop(1, '#451a03');
-      ctx.fillStyle = brGrad;
+      // Heavy forged chain link connecting the weights
+      ctx.strokeStyle = '#ca8a04';
+      ctx.lineWidth = 3.2;
       ctx.beginPath();
-      ctx.arc(0, 0, radius, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.strokeStyle = '#fbbf24';
-      ctx.lineWidth = 1.2;
+      ctx.moveTo(-armDist, 0);
+      ctx.lineTo(armDist, 0);
       ctx.stroke();
 
-    } else if (p.ammoType === 'chain') {
-      // --- CHAIN SHOT: DUAL LINKED WHIRLING BALLS ---
-      const chainRot = Date.now() * 0.015;
-      const dist = radius * 1.35;
-      const bx1 = Math.cos(chainRot) * dist;
-      const by1 = Math.sin(chainRot) * dist;
-      const bx2 = -bx1;
-      const by2 = -by1;
-
-      // Golden chain link
-      ctx.strokeStyle = '#eab308';
-      ctx.lineWidth = 2.5;
-      ctx.beginPath();
-      ctx.moveTo(bx1, by1);
-      ctx.lineTo(bx2, by2);
-      ctx.stroke();
-
-      // Twin iron balls
-      ctx.fillStyle = '#1e293b';
-      ctx.beginPath();
-      ctx.arc(bx1, by1, 4.5, 0, Math.PI * 2);
-      ctx.arc(bx2, by2, 4.5, 0, Math.PI * 2);
-      ctx.fill();
-
-    } else if (p.ammoType === 'grape') {
-      // --- GRAPESHOT: SCATTERED CANISTER PELLETS ---
-      ctx.fillStyle = '#475569';
-      for (let g = 0; g < 4; g++) {
-        const ga = (g / 4) * Math.PI * 2;
+      // Interlocking chain link loops
+      ctx.strokeStyle = '#fde047';
+      ctx.lineWidth = 1.6;
+      for (let l = -armDist + 5; l < armDist; l += 6) {
         ctx.beginPath();
-        ctx.arc(Math.cos(ga) * 4, Math.sin(ga) * 4, 2.5, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.ellipse(l, 0, 3.5, 2, 0, 0, Math.PI * 2);
+        ctx.stroke();
       }
 
-    } else {
-      // --- STANDARD CAST IRON CANNONBALL ---
-      const halo = ctx.createRadialGradient(0, 0, 0, 0, 0, radius * 2.2);
-      halo.addColorStop(0, glow + 'cc');
-      halo.addColorStop(0.5, glow + '33');
-      halo.addColorStop(1, 'transparent');
-      ctx.fillStyle = halo;
+      // Draw the twin heavy spiked naval iron weights at both ends
+      [-armDist, armDist].forEach(bx => {
+        // Spiked weight outer glow
+        const wGrad = ctx.createRadialGradient(bx - 1.5, -1.5, 0, bx, 0, 6);
+        wGrad.addColorStop(0, '#fef08a');
+        wGrad.addColorStop(0.35, '#ca8a04');
+        wGrad.addColorStop(0.75, '#334155');
+        wGrad.addColorStop(1, '#0f172a');
+        ctx.fillStyle = wGrad;
+        ctx.beginPath();
+        ctx.arc(bx, 0, 5.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 4 lethal pointed iron spikes
+        ctx.fillStyle = '#fbbf24';
+        [0, Math.PI / 2, Math.PI, Math.PI * 1.5].forEach(spAngle => {
+          const sx = bx + Math.cos(spAngle) * 5.5;
+          const sy = Math.sin(spAngle) * 5.5;
+          const tipX = bx + Math.cos(spAngle) * 9.5;
+          const tipY = Math.sin(spAngle) * 9.5;
+          ctx.beginPath();
+          ctx.moveTo(sx - Math.sin(spAngle) * 2, sy + Math.cos(spAngle) * 2);
+          ctx.lineTo(tipX, tipY);
+          ctx.lineTo(sx + Math.sin(spAngle) * 2, sy - Math.cos(spAngle) * 2);
+          ctx.closePath();
+          ctx.fill();
+        });
+
+        // Specular gleam
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(bx - 1.8, -1.8, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      // Whirling spark flecks flying off the rotating tips
+      ctx.fillStyle = '#fffbeb';
+      const sparkA = Date.now() * 0.04;
+      ctx.fillRect(Math.cos(sparkA) * (armDist + 4), Math.sin(sparkA) * (armDist + 4), 2, 2);
+      ctx.fillRect(-Math.cos(sparkA) * (armDist + 4), -Math.sin(sparkA) * (armDist + 4), 2, 2);
+
+    } else if (isGrape) {
+      // =========================================================================
+      // [3] GRAPESHOT: GLOWING MOLTEN SHRAPNEL SLUG (Blazing Red-Hot Tracer Pellet)
+      // =========================================================================
+      ctx.rotate(pAngle);
+
+      // Searing hot halo glow
+      ctx.shadowColor = '#ef4444';
+      ctx.shadowBlur = 16;
+
+      const gHalo = ctx.createRadialGradient(0, 0, 1, 0, 0, 14);
+      gHalo.addColorStop(0, 'rgba(254, 240, 138, 0.9)');
+      gHalo.addColorStop(0.35, 'rgba(249, 115, 22, 0.8)');
+      gHalo.addColorStop(0.7, 'rgba(239, 68, 68, 0.45)');
+      gHalo.addColorStop(1, 'rgba(239, 68, 68, 0)');
+      ctx.fillStyle = gHalo;
       ctx.beginPath();
-      ctx.arc(0, 0, radius * 2.2, 0, Math.PI * 2);
+      ctx.arc(0, 0, 14, 0, Math.PI * 2);
       ctx.fill();
 
-      const ball = ctx.createRadialGradient(-radius * 0.35, -radius * 0.35, 0, 0, 0, radius);
-      ball.addColorStop(0, isPlayer ? '#e2e8f0' : '#fca5a5');
-      ball.addColorStop(0.6, p.ammo?.color || '#334155');
-      ball.addColorStop(1, '#020617');
-      ctx.fillStyle = ball;
+      // Incandescent elongated lead pellet (aerodynamic teardrop)
+      ctx.fillStyle = '#f97316';
       ctx.beginPath();
-      ctx.arc(0, 0, radius, 0, Math.PI * 2);
+      ctx.moveTo(7, 0);
+      ctx.lineTo(-6, -3.5);
+      ctx.lineTo(-9, 0);
+      ctx.lineTo(-6, 3.5);
+      ctx.closePath();
       ctx.fill();
+
+      // Blazing white-hot core
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.moveTo(5, 0);
+      ctx.lineTo(-3, -2);
+      ctx.lineTo(-6, 0);
+      ctx.lineTo(-3, 2);
+      ctx.closePath();
+      ctx.fill();
+
+      // Spark fleck
+      ctx.fillStyle = '#fef08a';
+      ctx.fillRect(-11, -1, 2, 2);
+
+    } else {
+      // =========================================================================
+      // [1] ROUND SHOT: HEAVY SOLID SIEGE CANNONBALL (With Elemental Gun Synergy)
+      // =========================================================================
+      ctx.rotate(pAngle);
+
+      // Atmospheric shockwave bow wave in front of heavy ball
+      ctx.strokeStyle = 'rgba(251, 146, 60, 0.65)';
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.arc(0, 0, radius * 1.5, -0.65, 0.65);
+      ctx.stroke();
+
+      if (bType === 'sniper') {
+        // --- LONG NINE SNIPER CORE ENHANCEMENT ---
+        ctx.shadowColor = '#38bdf8';
+        ctx.shadowBlur = 18;
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.7)';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(-18, -8); ctx.lineTo(12, 0); ctx.lineTo(-18, 8);
+        ctx.stroke();
+
+        ctx.fillStyle = '#38bdf8';
+        ctx.beginPath();
+        ctx.arc(0, 0, radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.moveTo(10, 0); ctx.lineTo(-6, -3); ctx.lineTo(-10, 0); ctx.lineTo(-6, 3);
+        ctx.closePath();
+        ctx.fill();
+
+      } else if (bType === 'lightning') {
+        // --- LIGHTNING TEMPEST ORB ---
+        ctx.shadowColor = '#06b6d4';
+        ctx.shadowBlur = 20;
+
+        const pGrad = ctx.createRadialGradient(0, 0, 1, 0, 0, radius * 1.6);
+        pGrad.addColorStop(0, '#ffffff');
+        pGrad.addColorStop(0.5, '#67e8f9');
+        pGrad.addColorStop(1, 'rgba(6, 182, 212, 0)');
+        ctx.fillStyle = pGrad;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius * 1.6, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.8;
+        for (let arc = 0; arc < 4; arc++) {
+          const a1 = (arc / 4) * Math.PI * 2 + (Date.now() * 0.02);
+          const l1 = radius * 1.6;
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.lineTo(Math.cos(a1) * l1, Math.sin(a1) * l1);
+          ctx.stroke();
+        }
+
+      } else if (bType === 'kraken') {
+        // --- KRAKEN ABYSSAL VOID VORTEX ---
+        ctx.shadowColor = '#a855f7';
+        ctx.shadowBlur = 18;
+
+        const vGrad = ctx.createRadialGradient(0, 0, 1, 0, 0, radius * 1.6);
+        vGrad.addColorStop(0, '#1e1b4b');
+        vGrad.addColorStop(0.6, '#7e22ce');
+        vGrad.addColorStop(1, 'rgba(168, 85, 247, 0)');
+        ctx.fillStyle = vGrad;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius * 1.6, 0, Math.PI * 2);
+        ctx.fill();
+
+        const vRot = Date.now() * 0.008;
+        ctx.strokeStyle = '#c084fc';
+        ctx.lineWidth = 2.2;
+        for (let t = 0; t < 3; t++) {
+          const ta = vRot + (t / 3) * Math.PI * 2;
+          ctx.beginPath();
+          ctx.arc(0, 0, radius * 0.9, ta, ta + 1.2);
+          ctx.stroke();
+        }
+
+      } else if (bType === 'infernal') {
+        // --- INFERNAL HELLFIRE DEMON SKULL ---
+        ctx.shadowColor = '#ef4444';
+        ctx.shadowBlur = 20;
+
+        const hGrad = ctx.createRadialGradient(0, 0, 2, 0, 0, radius * 2.0);
+        hGrad.addColorStop(0, '#fef08a');
+        hGrad.addColorStop(0.5, '#f97316');
+        hGrad.addColorStop(1, 'rgba(239, 68, 68, 0)');
+        ctx.fillStyle = hGrad;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius * 2.0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#450a0a';
+        ctx.beginPath();
+        ctx.arc(0, -1, radius * 0.85, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillRect(-radius * 0.45, 0, radius * 0.9, radius * 0.75);
+
+        ctx.fillStyle = '#fef08a';
+        ctx.fillRect(-radius * 0.35, -radius * 0.2, 2.5, 2.5);
+        ctx.fillRect(radius * 0.15, -radius * 0.2, 2.5, 2.5);
+
+      } else if (bType === 'magma') {
+        // --- VOLCANIC MAGMA LAVA BOMB ---
+        ctx.shadowColor = '#f97316';
+        ctx.shadowBlur = 16;
+
+        const mGrad = ctx.createRadialGradient(0, 0, 2, 0, 0, radius * 1.5);
+        mGrad.addColorStop(0, '#fef08a');
+        mGrad.addColorStop(0.5, '#ea580c');
+        mGrad.addColorStop(0.85, '#7c2d12');
+        mGrad.addColorStop(1, 'rgba(124, 45, 18, 0)');
+        ctx.fillStyle = mGrad;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius * 1.5, 0, Math.PI * 2);
+        ctx.fill();
+
+      } else if (bType === 'smasher') {
+        // --- CARRONADE SMASHER JAGGED SLUGS ---
+        const rot = Date.now() * 0.01;
+        ctx.fillStyle = '#334155';
+        ctx.strokeStyle = '#94a3b8';
+        ctx.lineWidth = 1.2;
+        for (let sIdx = 0; sIdx < 3; sIdx++) {
+          const sa = rot + (sIdx / 3) * Math.PI * 2;
+          const sx = Math.cos(sa) * 5;
+          const sy = Math.sin(sa) * 5;
+          ctx.fillRect(sx - 3.5, sy - 3.5, 7, 7);
+          ctx.strokeRect(sx - 3.5, sy - 3.5, 7, 7);
+        }
+
+      } else if (bType === 'bronze') {
+        // --- BRONZE 12-POUNDER CAST METAL ---
+        ctx.shadowColor = '#f59e0b';
+        ctx.shadowBlur = 15;
+        const brGrad = ctx.createRadialGradient(-radius * 0.35, -radius * 0.35, 0, 0, 0, radius);
+        brGrad.addColorStop(0, '#fef3c7');
+        brGrad.addColorStop(0.45, '#d97706');
+        brGrad.addColorStop(1, '#451a03');
+        ctx.fillStyle = brGrad;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#fbbf24';
+        ctx.lineWidth = 1.4;
+        ctx.stroke();
+
+      } else {
+        // --- STANDARD HEAVY CAST IRON SIEGE BALL ---
+        ctx.shadowColor = '#f97316';
+        ctx.shadowBlur = 14;
+
+        // Fiery outer corona
+        const halo = ctx.createRadialGradient(0, 0, 0, 0, 0, radius * 2.2);
+        halo.addColorStop(0, 'rgba(254, 215, 170, 0.9)');
+        halo.addColorStop(0.4, 'rgba(249, 115, 22, 0.6)');
+        halo.addColorStop(0.8, 'rgba(234, 88, 12, 0.25)');
+        halo.addColorStop(1, 'transparent');
+        ctx.fillStyle = halo;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius * 2.2, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Heavy shaded 3D iron sphere
+        const ball = ctx.createRadialGradient(-radius * 0.35, -radius * 0.35, 0, 0, 0, radius);
+        ball.addColorStop(0, '#ffedd5');
+        ball.addColorStop(0.3, '#f97316');
+        ball.addColorStop(0.65, '#334155');
+        ball.addColorStop(1, '#020617');
+        ctx.fillStyle = ball;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Molten fissure veins on iron surface
+        ctx.strokeStyle = '#fde047';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(-radius * 0.2, -radius * 0.3);
+        ctx.lineTo(radius * 0.1, 0);
+        ctx.lineTo(-radius * 0.1, radius * 0.35);
+        ctx.stroke();
+      }
     }
 
     ctx.restore();

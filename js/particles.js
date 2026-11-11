@@ -44,64 +44,285 @@ class ParticleSystem {
   }
 
   cannonFire(x, y, angle, color = '#ffcc00') {
-    // 1. Blazing directional muzzle flame
+    this.cannonFireRound(x, y, angle, color);
+  }
+
+  // --- 1. ROUND SHOT: HEAVY SHOCKWAVE & ROARING SMOKE PLUME ---
+  cannonFireRound(x, y, angle, color = '#f97316') {
+    this.addRipple(x, y, 48, 'rgba(249, 115, 22, 0.65)', 350);
+    // Concentrated forward siege flame jet
+    this.emit(x, y, {
+      count: 22,
+      angle,
+      spread: 0.28,
+      speedMin: 7,
+      speedMax: 18,
+      life: 250,
+      sizeMin: 5,
+      sizeMax: 12,
+      color: color || '#f97316',
+    });
+    // Incandescent orange embers
+    this.emit(x, y, {
+      count: 16,
+      angle,
+      spread: 0.38,
+      speedMin: 4,
+      speedMax: 12,
+      life: 450,
+      sizeMin: 2.5,
+      sizeMax: 5,
+      color: '#fef08a',
+    });
+    // Billowing dark gunpowder smoke rolls
     this.emit(x, y, {
       count: 18,
       angle,
-      spread: 0.32,
-      speedMin: 5,
-      speedMax: 14,
-      life: 220,
-      sizeMin: 4,
-      sizeMax: 10,
-      color: color,
-    });
-    // 2. Burning powder sparks
-    this.emit(x, y, {
-      count: 12,
-      angle,
-      spread: 0.45,
-      speedMin: 3,
-      speedMax: 9,
-      life: 380,
-      sizeMin: 2,
-      sizeMax: 4,
-      color: '#fff275',
-    });
-    // 3. Billowing gunpowder smoke rolling out and expanding
-    this.emit(x, y, {
-      count: 14,
-      angle,
       spread: 0.55,
-      speedMin: 1.2,
-      speedMax: 4.5,
-      life: 950,
-      sizeMin: 8,
-      sizeMax: 22,
-      color: 'rgba(200, 205, 215, 0.75)',
+      speedMin: 1.5,
+      speedMax: 5.5,
+      life: 1100,
+      sizeMin: 10,
+      sizeMax: 26,
+      color: 'rgba(100, 116, 139, 0.8)',
       type: 'smoke',
       grow: true,
-      drag: 0.95,
+      drag: 0.94,
     });
   }
 
-  broadsideBlast(x, y, angle) {
-    this.addRipple(x, y, 70, 'rgba(255, 200, 100, 0.5)', 500);
-    // Massive multi-barrel muzzle blast
+  // --- 2. CHAIN SHOT: WHIRLING GOLDEN SPARKS & DUAL TANGENTIAL VAPOR ---
+  cannonFireChain(x, y, angle, color = '#fbbf24') {
+    this.addRipple(x, y, 36, 'rgba(250, 204, 21, 0.55)', 300);
+    // Sharp yellow flash
     this.emit(x, y, {
-      count: 28,
+      count: 14,
       angle,
-      spread: 0.65,
+      spread: 0.3,
       speedMin: 6,
-      speedMax: 16,
-      life: 280,
-      sizeMin: 5,
-      sizeMax: 14,
-      color: '#ffa500',
+      speedMax: 14,
+      life: 200,
+      sizeMin: 4,
+      sizeMax: 8,
+      color: '#fde047',
     });
-    // Volumetric dense white smoke rolling across the water
+    // Whirling golden chain sparks bursting laterally (tangential spin)
+    this.emit(x, y, {
+      count: 24,
+      angle: angle + Math.PI / 2,
+      spread: 0.7,
+      speedMin: 4,
+      speedMax: 11,
+      life: 400,
+      sizeMin: 2,
+      sizeMax: 4.5,
+      color: '#fbbf24',
+    });
+    this.emit(x, y, {
+      count: 24,
+      angle: angle - Math.PI / 2,
+      spread: 0.7,
+      speedMin: 4,
+      speedMax: 11,
+      life: 400,
+      sizeMin: 2,
+      sizeMax: 4.5,
+      color: '#fbbf24',
+    });
+    // Wispy air streaks
+    this.emit(x, y, {
+      count: 10,
+      angle,
+      spread: 0.6,
+      speedMin: 2,
+      speedMax: 6,
+      life: 600,
+      sizeMin: 6,
+      sizeMax: 16,
+      color: 'rgba(240, 240, 245, 0.6)',
+      type: 'smoke',
+      grow: true,
+    });
+  }
+
+  // --- 3. GRAPESHOT: EXPLOSIVE CONICAL BLUNDERBUSS FAN & SHRAPNEL SPRAY ---
+  cannonFireGrape(x, y, angle, color = '#ef4444') {
+    this.addRipple(x, y, 42, 'rgba(239, 68, 68, 0.5)', 300);
+    // Wide conical blunderbuss flash (55-degree fan)
     this.emit(x, y, {
       count: 26,
+      angle,
+      spread: 0.85,
+      speedMin: 6,
+      speedMax: 17,
+      life: 220,
+      sizeMin: 4,
+      sizeMax: 10,
+      color: '#f97316',
+    });
+    // Swarm of 36+ incandescent red-hot and amber shrapnel embers
+    this.emit(x, y, {
+      count: 36,
+      angle,
+      spread: 0.88,
+      speedMin: 5,
+      speedMax: 15,
+      life: 380,
+      sizeMin: 2,
+      sizeMax: 4,
+      color: '#ef4444',
+    });
+    this.emit(x, y, {
+      count: 18,
+      angle,
+      spread: 0.75,
+      speedMin: 6,
+      speedMax: 14,
+      life: 320,
+      sizeMin: 2,
+      sizeMax: 3.5,
+      color: '#fef08a',
+    });
+    // Sudden buckshot smoke puff blooming outward
+    this.emit(x, y, {
+      count: 16,
+      angle,
+      spread: 0.9,
+      speedMin: 2,
+      speedMax: 5,
+      life: 750,
+      sizeMin: 8,
+      sizeMax: 20,
+      color: 'rgba(220, 225, 230, 0.75)',
+      type: 'smoke',
+      grow: true,
+    });
+  }
+
+  // --- AMMO IMPACT PARTICLES ---
+  sailShred(x, y, angle) {
+    // 14 fluttering white canvas rags drifting away on the wind
+    this.emit(x, y, {
+      count: 14,
+      angle: angle + Math.PI,
+      spread: 1.2,
+      speedMin: 1.5,
+      speedMax: 4.5,
+      life: 1000,
+      sizeMin: 4,
+      sizeMax: 9,
+      color: '#f8fafc',
+      drag: 0.92,
+    });
+    // Snapped hemp rigging ropes
+    this.emit(x, y, {
+      count: 8,
+      angle: angle + Math.PI,
+      spread: 1.0,
+      speedMin: 2,
+      speedMax: 6,
+      life: 700,
+      sizeMin: 2,
+      sizeMax: 4.5,
+      color: '#ca8a04',
+      drag: 0.94,
+    });
+    // Splinter debris
+    this.woodSplinters(x, y, angle, 6);
+  }
+
+  crewDecimate(x, y, angle) {
+    // Red blood/shrapnel splash droplets
+    this.emit(x, y, {
+      count: 16,
+      angle: angle + Math.PI,
+      spread: 1.2,
+      speedMin: 2.5,
+      speedMax: 7,
+      life: 420,
+      sizeMin: 3,
+      sizeMax: 6,
+      color: '#dc2626',
+    });
+    // Sizzling lead shrapnel sparks
+    this.emit(x, y, {
+      count: 12,
+      angle: angle + Math.PI,
+      spread: 0.9,
+      speedMin: 3,
+      speedMax: 8,
+      life: 300,
+      sizeMin: 2,
+      sizeMax: 3.5,
+      color: '#fef08a',
+    });
+    // Crimson suppression smoke puff
+    this.emit(x, y, {
+      count: 4,
+      angle: angle + Math.PI,
+      spread: 0.8,
+      speedMin: 1,
+      speedMax: 2.5,
+      life: 600,
+      sizeMin: 8,
+      sizeMax: 18,
+      color: 'rgba(185, 28, 28, 0.45)',
+      type: 'smoke',
+      grow: true,
+    });
+  }
+
+  broadsideBlast(x, y, angle, ammoType = 'round') {
+    const isChain = ammoType === 'chain';
+    const isGrape = ammoType === 'grape';
+    const rippleColor = isChain ? 'rgba(250, 204, 21, 0.55)' : (isGrape ? 'rgba(239, 68, 68, 0.55)' : 'rgba(255, 140, 20, 0.6)');
+    this.addRipple(x, y, 75, rippleColor, 500);
+
+    // Massive multi-barrel muzzle blast
+    const blastColor = isChain ? '#fde047' : (isGrape ? '#f97316' : '#ffa500');
+    this.emit(x, y, {
+      count: 32,
+      angle,
+      spread: isGrape ? 0.95 : 0.65,
+      speedMin: 6,
+      speedMax: 17,
+      life: 280,
+      sizeMin: 5,
+      sizeMax: 15,
+      color: blastColor,
+    });
+
+    if (isChain) {
+      // Golden chain sparks
+      this.emit(x, y, {
+        count: 35,
+        angle,
+        spread: 0.85,
+        speedMin: 4,
+        speedMax: 12,
+        life: 450,
+        sizeMin: 2,
+        sizeMax: 4.5,
+        color: '#fbbf24',
+      });
+    } else if (isGrape) {
+      // Red-hot shrapnel pellets fan
+      this.emit(x, y, {
+        count: 50,
+        angle,
+        spread: 1.1,
+        speedMin: 5,
+        speedMax: 16,
+        life: 400,
+        sizeMin: 2,
+        sizeMax: 4.5,
+        color: '#ef4444',
+      });
+    }
+
+    // Volumetric dense white smoke rolling across the water
+    this.emit(x, y, {
+      count: 28,
       angle,
       spread: 0.75,
       speedMin: 1.5,

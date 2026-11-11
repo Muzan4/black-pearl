@@ -314,9 +314,29 @@ html, body {
 }
 
 .ammo-btn.active {
-  border-color: var(--gold-light);
-  background: linear-gradient(180deg, rgba(60,45,20,0.95), rgba(30,22,10,0.98));
-  box-shadow: 0 0 15px rgba(201, 162, 39, 0.4);
+  transform: translateY(-2px) scale(1.05);
+  font-weight: bold;
+}
+
+.ammo-btn[data-ammo="round"].active {
+  border-color: #f97316;
+  background: linear-gradient(180deg, rgba(80, 30, 10, 0.95), rgba(40, 15, 5, 0.98));
+  box-shadow: 0 0 20px rgba(249, 115, 22, 0.65), inset 0 0 10px rgba(249, 115, 22, 0.3);
+  color: #fed7aa;
+}
+
+.ammo-btn[data-ammo="chain"].active {
+  border-color: #facc15;
+  background: linear-gradient(180deg, rgba(70, 55, 10, 0.95), rgba(35, 25, 5, 0.98));
+  box-shadow: 0 0 20px rgba(250, 204, 21, 0.65), inset 0 0 10px rgba(250, 204, 21, 0.3);
+  color: #fef08a;
+}
+
+.ammo-btn[data-ammo="grape"].active {
+  border-color: #ef4444;
+  background: linear-gradient(180deg, rgba(80, 15, 25, 0.95), rgba(40, 8, 12, 0.98));
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.65), inset 0 0 10px rgba(239, 68, 68, 0.3);
+  color: #fecaca;
 }
 
 .ammo-icon { font-size: 1.2rem; }

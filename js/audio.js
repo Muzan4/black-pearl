@@ -84,6 +84,13 @@ class AudioManager {
 
     switch (type) {
       case 'cannon': this._cannon(opts); break;
+      case 'cannon_round': this._cannonRound(opts); break;
+      case 'cannon_chain': this._cannonChain(opts); break;
+      case 'cannon_grape': this._cannonGrape(opts); break;
+      case 'impact_round': this._impactRound(opts); break;
+      case 'impact_chain': this._impactChain(opts); break;
+      case 'impact_grape': this._impactGrape(opts); break;
+      case 'ammo_switch': this._ammoSwitch(opts); break;
       case 'broadside': this._broadside(opts); break;
       case 'hit': this._hit(opts); break;
       case 'rake': this._rakeCritical(); break;
@@ -165,6 +172,258 @@ class AudioManager {
     bellGain.connect(this.masterGain);
     bellOsc.start(t0);
     bellOsc.stop(t0 + 0.3);
+  }
+
+  // --- 1. ROUND SHOT: HEAVY SIEGE CANNON THUNDER (Chest-thumping sub-bass boom) ---
+  _cannonRound(opts = {}) {
+    const t0 = this.ctx.currentTime;
+    const pitch = opts.pitch || 1.0;
+
+    // Deep sub-bass drop (35Hz)
+    const sub = this.ctx.createOscillator();
+    const subG = this.ctx.createGain();
+    sub.type = 'sine';
+    sub.frequency.setValueAtTime(125 * pitch, t0);
+    sub.frequency.exponentialRampToValueAtTime(24, t0 + 0.45);
+    subG.gain.setValueAtTime(0.95, t0);
+    subG.gain.exponentialRampToValueAtTime(0.001, t0 + 0.48);
+    sub.connect(subG);
+    subG.connect(this.masterGain);
+    sub.start(t0);
+    sub.stop(t0 + 0.5);
+
+    // Roaring low-frequency gunpowder blast
+    const noise = this.ctx.createBufferSource();
+    noise.buffer = this._noiseBuffer(0.55);
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(550, t0);
+    filter.frequency.exponentialRampToValueAtTime(90, t0 + 0.5);
+    const ng = this.ctx.createGain();
+    ng.gain.setValueAtTime(0.9, t0);
+    ng.gain.exponentialRampToValueAtTime(0.001, t0 + 0.52);
+    noise.connect(filter);
+    filter.connect(ng);
+    ng.connect(this.masterGain);
+    noise.start(t0);
+
+    // Heavy iron bore ring
+    const ring = this.ctx.createOscillator();
+    const rg = this.ctx.createGain();
+    ring.type = 'triangle';
+    ring.frequency.setValueAtTime(140 * pitch, t0);
+    ring.frequency.exponentialRampToValueAtTime(45, t0 + 0.35);
+    rg.gain.setValueAtTime(0.35, t0);
+    rg.gain.exponentialRampToValueAtTime(0.001, t0 + 0.38);
+    ring.connect(rg);
+    rg.connect(this.masterGain);
+    ring.start(t0);
+    ring.stop(t0 + 0.4);
+  }
+
+  // --- 2. CHAIN SHOT: WHIRLING METALLIC SCREECH & RATTLE ---
+  _cannonChain(opts = {}) {
+    const t0 = this.ctx.currentTime;
+
+    // Sharp compressed discharge snap
+    const snap = this.ctx.createOscillator();
+    const snapG = this.ctx.createGain();
+    snap.type = 'square';
+    snap.frequency.setValueAtTime(320, t0);
+    snap.frequency.exponentialRampToValueAtTime(70, t0 + 0.12);
+    snapG.gain.setValueAtTime(0.5, t0);
+    snapG.gain.exponentialRampToValueAtTime(0.001, t0 + 0.14);
+    snap.connect(snapG);
+    snapG.connect(this.masterGain);
+    snap.start(t0);
+    snap.stop(t0 + 0.15);
+
+    // Whistling spinning aerodynamic chain Doppler whine
+    const whistle = this.ctx.createOscillator();
+    const whistleG = this.ctx.createGain();
+    whistle.type = 'sine';
+    whistle.frequency.setValueAtTime(650, t0);
+    whistle.frequency.exponentialRampToValueAtTime(1380, t0 + 0.12);
+    whistle.frequency.exponentialRampToValueAtTime(820, t0 + 0.35);
+    whistleG.gain.setValueAtTime(0.4, t0);
+    whistleG.gain.exponentialRampToValueAtTime(0.001, t0 + 0.38);
+    whistle.connect(whistleG);
+    whistleG.connect(this.masterGain);
+    whistle.start(t0);
+    whistle.stop(t0 + 0.4);
+
+    // Rapid metallic clinking chain links rattle
+    [1050, 1420, 1750].forEach((freq, idx) => {
+      const link = this.ctx.createOscillator();
+      const lg = this.ctx.createGain();
+      link.type = 'triangle';
+      link.frequency.setValueAtTime(freq, t0 + idx * 0.035);
+      lg.gain.setValueAtTime(0.25, t0 + idx * 0.035);
+      lg.gain.exponentialRampToValueAtTime(0.001, t0 + idx * 0.035 + 0.14);
+      link.connect(lg);
+      lg.connect(this.masterGain);
+      link.start(t0 + idx * 0.035);
+      link.stop(t0 + idx * 0.035 + 0.15);
+    });
+  }
+
+  // --- 3. GRAPESHOT: EXPLOSIVE BLUNDERBUSS CANISTER SNAP & SHRAPNEL SCATTER ---
+  _cannonGrape(opts = {}) {
+    const t0 = this.ctx.currentTime;
+
+    // Extremely snappy high-pressure gunpowder crack (blunderbuss burst)
+    const crack = this.ctx.createBufferSource();
+    crack.buffer = this._noiseBuffer(0.28);
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'highpass';
+    filter.frequency.setValueAtTime(1800, t0);
+    filter.frequency.exponentialRampToValueAtTime(600, t0 + 0.2);
+    const cg = this.ctx.createGain();
+    cg.gain.setValueAtTime(0.95, t0);
+    cg.gain.exponentialRampToValueAtTime(0.001, t0 + 0.24);
+    crack.connect(filter);
+    filter.connect(cg);
+    cg.connect(this.masterGain);
+    crack.start(t0);
+
+    // Deep canister kickback punch
+    const kick = this.ctx.createOscillator();
+    const kg = this.ctx.createGain();
+    kick.type = 'sine';
+    kick.frequency.setValueAtTime(160, t0);
+    kick.frequency.exponentialRampToValueAtTime(32, t0 + 0.22);
+    kg.gain.setValueAtTime(0.7, t0);
+    kg.gain.exponentialRampToValueAtTime(0.001, t0 + 0.25);
+    kick.connect(kg);
+    kg.connect(this.masterGain);
+    kick.start(t0);
+    kick.stop(t0 + 0.26);
+
+    // Granular lead pellet hiss & scatter whoosh
+    const hiss = this.ctx.createBufferSource();
+    hiss.buffer = this._noiseBuffer(0.35);
+    const hf = this.ctx.createBiquadFilter();
+    hf.type = 'bandpass';
+    hf.frequency.value = 2400;
+    hf.Q.value = 1.2;
+    const hg = this.ctx.createGain();
+    hg.gain.setValueAtTime(0.45, t0);
+    hg.gain.exponentialRampToValueAtTime(0.001, t0 + 0.32);
+    hiss.connect(hf);
+    hf.connect(hg);
+    hg.connect(this.masterGain);
+    hiss.start(t0);
+  }
+
+  // --- AMMO IMPACTS ---
+  _impactRound(opts = {}) {
+    const t0 = this.ctx.currentTime;
+    // Crushing wooden hull fracture
+    const osc = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(120, t0);
+    osc.frequency.exponentialRampToValueAtTime(26, t0 + 0.18);
+    g.gain.setValueAtTime(0.6, t0);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.2);
+    osc.connect(g);
+    g.connect(this.masterGain);
+    osc.start(t0);
+    osc.stop(t0 + 0.22);
+
+    // Heavy splinter noise
+    const noise = this.ctx.createBufferSource();
+    noise.buffer = this._noiseBuffer(0.24);
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = 380;
+    filter.Q.value = 2.0;
+    const ng = this.ctx.createGain();
+    ng.gain.setValueAtTime(0.65, t0);
+    ng.gain.exponentialRampToValueAtTime(0.001, t0 + 0.22);
+    noise.connect(filter);
+    filter.connect(ng);
+    ng.connect(this.masterGain);
+    noise.start(t0);
+  }
+
+  _impactChain(opts = {}) {
+    const t0 = this.ctx.currentTime;
+    // Tearing canvas fabric rip sound
+    const rip = this.ctx.createBufferSource();
+    rip.buffer = this._noiseBuffer(0.32);
+    const rf = this.ctx.createBiquadFilter();
+    rf.type = 'highpass';
+    rf.frequency.setValueAtTime(1600, t0);
+    rf.frequency.exponentialRampToValueAtTime(700, t0 + 0.28);
+    const rg = this.ctx.createGain();
+    rg.gain.setValueAtTime(0.7, t0);
+    rg.gain.exponentialRampToValueAtTime(0.001, t0 + 0.3);
+    rip.connect(rf);
+    rf.connect(rg);
+    rg.connect(this.masterGain);
+    rip.start(t0);
+
+    // Snapped rigging rope whip crack
+    const whip = this.ctx.createOscillator();
+    const wg = this.ctx.createGain();
+    whip.type = 'sawtooth';
+    whip.frequency.setValueAtTime(880, t0);
+    whip.frequency.exponentialRampToValueAtTime(150, t0 + 0.08);
+    wg.gain.setValueAtTime(0.4, t0);
+    wg.gain.exponentialRampToValueAtTime(0.001, t0 + 0.1);
+    whip.connect(wg);
+    wg.connect(this.masterGain);
+    whip.start(t0);
+    whip.stop(t0 + 0.12);
+  }
+
+  _impactGrape(opts = {}) {
+    const t0 = this.ctx.currentTime;
+    // Rapid staccato pepper impacts (lead pellets slamming into deck & crew)
+    for (let i = 0; i < 4; i++) {
+      const delay = i * 0.02 + Math.random() * 0.01;
+      const thud = this.ctx.createOscillator();
+      const tg = this.ctx.createGain();
+      thud.type = 'sine';
+      thud.frequency.setValueAtTime(340 - i * 40, t0 + delay);
+      thud.frequency.exponentialRampToValueAtTime(80, t0 + delay + 0.05);
+      tg.gain.setValueAtTime(0.35, t0 + delay);
+      tg.gain.exponentialRampToValueAtTime(0.001, t0 + delay + 0.06);
+      thud.connect(tg);
+      tg.connect(this.masterGain);
+      thud.start(t0 + delay);
+      thud.stop(t0 + delay + 0.07);
+    }
+  }
+
+  _ammoSwitch(opts = {}) {
+    const t0 = this.ctx.currentTime;
+    // Crisp mechanical breech lever slide + solid iron ball loading thud
+    const slide = this.ctx.createOscillator();
+    const sg = this.ctx.createGain();
+    slide.type = 'sine';
+    slide.frequency.setValueAtTime(420, t0);
+    slide.frequency.exponentialRampToValueAtTime(780, t0 + 0.06);
+    sg.gain.setValueAtTime(0.28, t0);
+    sg.gain.exponentialRampToValueAtTime(0.001, t0 + 0.07);
+    slide.connect(sg);
+    sg.connect(this.masterGain);
+    slide.start(t0);
+    slide.stop(t0 + 0.08);
+
+    // Heavy brass breech clank
+    const clank = this.ctx.createOscillator();
+    const cg = this.ctx.createGain();
+    clank.type = 'triangle';
+    clank.frequency.setValueAtTime(260, t0 + 0.06);
+    clank.frequency.exponentialRampToValueAtTime(90, t0 + 0.14);
+    cg.gain.setValueAtTime(0.4, t0 + 0.06);
+    cg.gain.exponentialRampToValueAtTime(0.001, t0 + 0.15);
+    clank.connect(cg);
+    cg.connect(this.masterGain);
+    clank.start(t0 + 0.06);
+    clank.stop(t0 + 0.16);
   }
 
   _broadside(opts = {}) {

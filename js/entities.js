@@ -22,7 +22,11 @@ class Projectile {
     this.isMortar = gun.bulletType === 'magma';
     this.isBroadside = isBroadside;
     this.z = 0;
-    this.trail = [{ x, y, z: 0 }];
+    this.spin = rand(0, Math.PI * 2);
+    this.speedMult = ammoType === 'grape' ? rand(0.88, 1.12) : 1.0;
+    this.vx = Math.cos(angle) * this.speed * this.speedMult;
+    this.vy = Math.sin(angle) * this.speed * this.speedMult;
+    this.trail = [{ x, y, z: 0, spin: this.spin }];
   }
 
   update(dt) {
@@ -36,6 +40,7 @@ class Projectile {
 
     this.x += this.vx * step;
     this.y += this.vy * step;
+    this.spin += step * 0.38; // High-speed spin for whirling chain & shrapnel
 
     // Height arc for mortar bombs (ballistic curve over water)
     if (this.isMortar) {
@@ -45,8 +50,8 @@ class Projectile {
       this.z = 0;
     }
 
-    this.trail.push({ x: this.x, y: this.y, z: this.z });
-    if (this.trail.length > 16) this.trail.shift();
+    this.trail.push({ x: this.x, y: this.y, z: this.z, spin: this.spin });
+    if (this.trail.length > (this.ammoType === 'chain' ? 20 : 16)) this.trail.shift();
   }
 }
 
@@ -534,20 +539,26 @@ class Player {
     const gunnerMod = 1 + (this.crewUpgrades?.gunner ? (this.crewUpgrades.gunner - 1) * 0.15 : 0);
     const bsMod = 1.35 * (1 + extraGuns * 0.15) * gunnerMod;
 
+    const isGrape = this.ammoType === 'grape';
+    const isChain = this.ammoType === 'chain';
+    const pelletsPerGun = isGrape ? 4 : 1;
+    const baseSpread = isGrape ? 0.22 : (isChain ? 0.05 : 0.08);
+
     for (const sideOffset of sides) {
       const dirAngle = this.angle + sideOffset;
       for (let g = 0; g < gunsPerSide; g++) {
         const along = (g - (gunsPerSide - 1) / 2) * 14;
         const sx = this.x + Math.cos(this.angle) * along + Math.cos(dirAngle) * 22;
         const sy = this.y + Math.sin(this.angle) * along + Math.sin(dirAngle) * 22;
-        const spread = 0.08;
-        const a = dirAngle + rand(-spread, spread);
-        const p = new Projectile(sx, sy, a, this.ammoType, 'player', {
-          ...this.gun,
-          damage: (this.gun.damage || 1) * bsMod,
-          range: (this.gun.range || 600) * 0.98,
-        }, true);
-        projectiles.push(p);
+        for (let pIdx = 0; pIdx < pelletsPerGun; pIdx++) {
+          const a = dirAngle + rand(-baseSpread, baseSpread);
+          const p = new Projectile(sx, sy, a, this.ammoType, 'player', {
+            ...this.gun,
+            damage: (this.gun.damage || 1) * bsMod * (isGrape ? 0.65 : 1),
+            range: (this.gun.range || 600) * 0.98,
+          }, true);
+          projectiles.push(p);
+        }
       }
     }
 

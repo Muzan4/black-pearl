@@ -137,12 +137,19 @@ class Game {
     };
 
     const ammoSwitch = this.input.consumeAmmoSwitch();
-    if (ammoSwitch) {
+    if (ammoSwitch && ammoSwitch !== this.player.ammoType) {
       this.player.ammoType = ammoSwitch;
       document.querySelectorAll('.ammo-btn, .touch-ammo-btn').forEach(b => {
         b.classList.toggle('active', b.dataset.ammo === ammoSwitch);
       });
-      this.audio.play('ui');
+      this.audio.play('ammo_switch', { ammo: ammoSwitch });
+      if (ammoSwitch === 'round') {
+        this.floatingTexts.push(new FloatingText(this.player.x, this.player.y - 36, '● [1] ROUND SHOT LOADED (Heavy Hull Breaker)', '#f97316', 18));
+      } else if (ammoSwitch === 'chain') {
+        this.floatingTexts.push(new FloatingText(this.player.x, this.player.y - 36, '⛓ [2] CHAIN SHOT LOADED (Sail Crippler & Slow)', '#fde047', 18));
+      } else if (ammoSwitch === 'grape') {
+        this.floatingTexts.push(new FloatingText(this.player.x, this.player.y - 36, '✦ [3] GRAPESHOT LOADED (Crew Sweeper Spread)', '#ef4444', 18));
+      }
     }
 
     if (input.repairPressed) {
@@ -182,9 +189,21 @@ class Game {
       if (newProj.length > 0) {
         this.projectiles.push(...newProj);
         const fireAngle = Math.atan2(target.y - this.player.y, target.x - this.player.x);
-        this.particles.cannonFire(this.player.x, this.player.y, fireAngle, this.player.gun?.color);
-        this.audio.play('cannon');
-        this.renderer.shake(3.5);
+        const ammoType = this.player.ammoType;
+
+        if (ammoType === 'chain') {
+          this.particles.cannonFireChain(this.player.x, this.player.y, fireAngle, this.player.gun?.color);
+          this.audio.play('cannon_chain');
+          this.renderer.shake(3.0);
+        } else if (ammoType === 'grape') {
+          this.particles.cannonFireGrape(this.player.x, this.player.y, fireAngle, this.player.gun?.color);
+          this.audio.play('cannon_grape');
+          this.renderer.shake(5.2);
+        } else {
+          this.particles.cannonFireRound(this.player.x, this.player.y, fireAngle, this.player.gun?.color);
+          this.audio.play('cannon_round');
+          this.renderer.shake(4.2);
+        }
       }
     }
 
@@ -193,11 +212,26 @@ class Game {
       const bProj = this.player.fireBroadside();
       if (bProj.length > 0) {
         this.projectiles.push(...bProj);
-        this.particles.broadsideBlast(this.player.x, this.player.y, this.player.angle - Math.PI / 2);
-        this.particles.broadsideBlast(this.player.x, this.player.y, this.player.angle + Math.PI / 2);
-        this.audio.play('broadside');
-        this.renderer.shake(8.5);
-        this.floatingTexts.push(new FloatingText(this.player.x, this.player.y - 30, '⚡ BROADSIDE SALVO!', '#facc15', 20));
+        const ammoType = this.player.ammoType;
+        this.particles.broadsideBlast(this.player.x, this.player.y, this.player.angle - Math.PI / 2, ammoType);
+        this.particles.broadsideBlast(this.player.x, this.player.y, this.player.angle + Math.PI / 2, ammoType);
+
+        if (ammoType === 'chain') {
+          this.audio.play('cannon_chain');
+          this.audio.play('broadside');
+          this.renderer.shake(7.5);
+          this.floatingTexts.push(new FloatingText(this.player.x, this.player.y - 30, '⛓ DEMASTING CHAIN BROADSIDE!', '#fde047', 20));
+        } else if (ammoType === 'grape') {
+          this.audio.play('cannon_grape');
+          this.audio.play('broadside');
+          this.renderer.shake(9.5);
+          this.floatingTexts.push(new FloatingText(this.player.x, this.player.y - 30, '✦ SHRAPNEL STORM BROADSIDE!', '#ef4444', 20));
+        } else {
+          this.audio.play('cannon_round');
+          this.audio.play('broadside');
+          this.renderer.shake(8.8);
+          this.floatingTexts.push(new FloatingText(this.player.x, this.player.y - 30, '⚡ THUNDEROUS SIEGE BROADSIDE!', '#facc15', 20));
+        }
       }
     }
 
@@ -469,10 +503,23 @@ class Game {
                 22
               ));
             } else {
-              this.particles.woodSplinters(p.x, p.y, p.angle, 6);
-              this.particles.emit(p.x, p.y, { count: 6, color: p.ammo.color, life: 300, speedMin: 2, speedMax: 4 });
-              this.audio.play('hit');
-              this.floatingTexts.push(new FloatingText(enemy.x, enemy.y - 20, `-${Math.round(p.ammo.hullDmg * dmg)}`, '#ff6666'));
+              if (p.ammoType === 'chain') {
+                this.particles.sailShred(p.x, p.y, p.angle);
+                this.audio.play('impact_chain');
+                this.renderer.shake(2.5);
+                this.floatingTexts.push(new FloatingText(enemy.x, enemy.y - 20, `⛓ -${Math.round(p.ammo.sailDmg * dmg)} SAILS! [SLOWED]`, '#38bdf8', 16));
+              } else if (p.ammoType === 'grape') {
+                this.particles.crewDecimate(p.x, p.y, p.angle);
+                this.audio.play('impact_grape');
+                this.renderer.shake(2.8);
+                this.floatingTexts.push(new FloatingText(enemy.x, enemy.y - 20, `☠ -${Math.round(p.ammo.crewDmg * dmg)} CREW!`, '#ec4899', 16));
+              } else {
+                this.particles.woodSplinters(p.x, p.y, p.angle, 14);
+                this.particles.emit(p.x, p.y, { count: 8, color: '#f97316', life: 350, speedMin: 2, speedMax: 6 });
+                this.audio.play('impact_round');
+                this.renderer.shake(4.2);
+                this.floatingTexts.push(new FloatingText(enemy.x, enemy.y - 20, `💥 -${Math.round(p.ammo.hullDmg * dmg)} HULL`, '#f97316', 17));
+              }
             }
 
             if (killed) {

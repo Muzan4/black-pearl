@@ -12,14 +12,15 @@ class InputManager {
       broadsidePressed: false,
       repairPressed: false,
       pausePressed: false,
+      drift: false,
+      harpoonPressed: false,
       ammoSwitch: null,
-      ammoRotate: 0,
       targetX: 0,
       targetY: 0,
     };
 
     this.joystick = { active: false, x: 0, y: 0 };
-    this.mouse = { x: window.innerWidth / 2, y: window.innerHeight / 2, down: false, rightDown: false };
+    this.mouse = { x: window.innerWidth / 2, y: window.innerHeight / 2, down: false, rightDown: false, middleDown: false };
     this.isTouch = 'ontouchstart' in window;
     this._pauseWasDown = false;
     this.touchBroadside = false;
@@ -33,25 +34,14 @@ class InputManager {
       this.mouse.y = e.clientY;
     });
 
-    // Mouse Wheel weapon mode rotation during naval combat
-    let lastWheelTime = 0;
-    window.addEventListener('wheel', e => {
-      if (window.game?.state === 'playing') {
-        e.preventDefault();
-        const now = performance.now();
-        if (now - lastWheelTime < 100) return;
-        const dir = e.deltaY > 0 ? 1 : (e.deltaY < 0 ? -1 : 0);
-        if (dir !== 0) {
-          lastWheelTime = now;
-          this.state.ammoRotate = dir;
-        }
-      }
-    }, { passive: false });
-
     canvas.addEventListener('mousedown', e => {
       if (e.button === 0) {
         e.preventDefault();
         this.mouse.down = true;
+      } else if (e.button === 1) {
+        e.preventDefault();
+        this.mouse.middleDown = true;
+        this.state.harpoonPressed = true;
       } else if (e.button === 2) {
         e.preventDefault();
         this.mouse.rightDown = true;
@@ -61,6 +51,7 @@ class InputManager {
 
     window.addEventListener('mouseup', e => {
       if (e.button === 0) this.mouse.down = false;
+      if (e.button === 1) this.mouse.middleDown = false;
       if (e.button === 2) this.mouse.rightDown = false;
     });
 
@@ -72,15 +63,18 @@ class InputManager {
   }
 
   _onKeyDown(e) {
-    if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
+    if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight'].includes(e.code)) {
       e.preventDefault();
     }
     this.keys[e.code] = true;
-    if (e.code === 'Digit1') this.state.ammoSwitch = 0;
-    if (e.code === 'Digit2') this.state.ammoSwitch = 1;
-    if (e.code === 'Digit3') this.state.ammoSwitch = 2;
-    if (e.code === 'KeyE' || e.code === 'KeyF' || e.code === 'KeyQ') {
+    if (e.code === 'Digit1') this.state.ammoSwitch = 'round';
+    if (e.code === 'Digit2') this.state.ammoSwitch = 'chain';
+    if (e.code === 'Digit3') this.state.ammoSwitch = 'grape';
+    if (e.code === 'KeyE' || e.code === 'KeyQ') {
       this.state.broadsidePressed = true;
+    }
+    if (e.code === 'KeyF') {
+      this.state.harpoonPressed = true;
     }
     if (e.code === 'KeyB') {
       window.game?.toggleArmory?.();
@@ -96,9 +90,10 @@ class InputManager {
     this.joystick = { active: false, x: 0, y: 0 };
     this.mouse.down = false;
     this.mouse.rightDown = false;
+    this.mouse.middleDown = false;
   }
 
-  /** Convert screen mouse pos to world coordinates (handles DPI scaling) */
+  /** Convert screen mouse pos to world coordinates */
   getWorldTarget(camera) {
     const rect = this.canvas.getBoundingClientRect();
     const scaleX = this.canvas.width / rect.width;
@@ -117,6 +112,7 @@ class InputManager {
     const fireBtn = document.getElementById('fire-btn');
     const repairBtn = document.getElementById('repair-btn');
     const broadsideBtn = document.getElementById('broadside-btn');
+    const harpoonBtn = document.getElementById('harpoon-btn');
     if (!zone) return;
 
     let touchId = null;
@@ -178,16 +174,16 @@ class InputManager {
       this.state.broadsidePressed = true;
     }, { passive: false });
 
+    harpoonBtn?.addEventListener('touchstart', e => {
+      e.preventDefault();
+      this.state.harpoonPressed = true;
+    }, { passive: false });
+
     repairBtn?.addEventListener('touchstart', e => {
       e.preventDefault();
       this.state.repairPressed = true;
     }, { passive: false });
 
-    repairBtn?.addEventListener('pointerdown', e => {
-      this.state.repairPressed = true;
-    });
-
-    // Touch aim: touch on canvas sets aim direction
     this.canvas.addEventListener('touchmove', e => {
       if (e.touches.length > 0) {
         const t = e.touches[e.touches.length - 1];
@@ -202,7 +198,7 @@ class InputManager {
     s.repairPressed = false;
     s.pausePressed = false;
 
-    // Movement — direct WASD / joystick
+    // Movement — WASD or joystick
     if (this.joystick.active) {
       s.up = this.joystick.y < -0.2;
       s.down = this.joystick.y > 0.2;
@@ -219,12 +215,19 @@ class InputManager {
     s.targetX = world.x;
     s.targetY = world.y;
 
-    // Fire chasers / swivels
+    // Fire chasers
     s.fire = !!(this.keys['Space'] || this.mouse.down);
+
+    // Anchor drift toggle (Shift key)
+    s.drift = !!(this.keys['ShiftLeft'] || this.keys['ShiftRight']);
 
     // Broadside trigger
     s.broadside = s.broadsidePressed || this.mouse.rightDown;
     s.broadsidePressed = false;
+
+    // Harpoon trigger
+    s.harpoon = s.harpoonPressed;
+    s.harpoonPressed = false;
 
     if (this.keys['KeyR']) s.repairPressed = true;
 
@@ -239,11 +242,5 @@ class InputManager {
     const sw = this.state.ammoSwitch;
     this.state.ammoSwitch = null;
     return sw;
-  }
-
-  consumeAmmoRotate() {
-    const rot = this.state.ammoRotate;
-    this.state.ammoRotate = 0;
-    return rot || 0;
   }
 }

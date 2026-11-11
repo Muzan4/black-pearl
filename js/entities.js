@@ -23,10 +23,6 @@ class Projectile {
     this.isBroadside = isBroadside;
     this.z = 0;
     this.trail = [{ x, y, z: 0 }];
-    this.pierceCount = 0;
-    this.hitEnemies = [];
-    this.special = 'standard';
-    this.aoeRadius = 0;
   }
 
   update(dt) {
@@ -38,40 +34,147 @@ class Projectile {
       return;
     }
 
-    // Homing tracking for seeking void/abyssal projectiles
-    if (this.special === 'homing' && this.owner === 'player' && window.game?.waves?.enemies) {
-      let nearest = null;
-      let nearD = 380;
-      for (const enemy of window.game.waves.enemies) {
-        if (!enemy.alive) continue;
-        const d = Math.hypot(enemy.x - this.x, enemy.y - this.y);
-        if (d < nearD) {
-          nearD = d;
-          nearest = enemy;
-        }
-      }
-      if (nearest) {
-        const targetA = Math.atan2(nearest.y - this.y, nearest.x - this.x);
-        const diff = angleDiff(this.angle, targetA);
-        this.angle += diff * Math.min(1, 0.085 * step);
-        this.vx = Math.cos(this.angle) * this.speed;
-        this.vy = Math.sin(this.angle) * this.speed;
-      }
-    }
-
     this.x += this.vx * step;
     this.y += this.vy * step;
 
     // Height arc for mortar bombs (ballistic curve over water)
     if (this.isMortar) {
       const progress = 1 - Math.max(0, this.life / this.maxLife);
-      this.z = Math.sin(progress * Math.PI) * 55;
+      this.z = Math.sin(progress * Math.PI) * 65;
     } else {
       this.z = 0;
     }
 
     this.trail.push({ x: this.x, y: this.y, z: this.z });
-    if (this.trail.length > 14) this.trail.shift();
+    if (this.trail.length > 16) this.trail.shift();
+  }
+}
+
+class Harpoon {
+  constructor(startX, startY, angle, owner) {
+    this.startX = startX;
+    this.startY = startY;
+    this.x = startX;
+    this.y = startY;
+    this.angle = angle;
+    this.owner = owner;
+    this.speed = 28;
+    this.vx = Math.cos(angle) * this.speed;
+    this.vy = Math.sin(angle) * this.speed;
+    this.range = 550;
+    this.traveled = 0;
+    this.target = null; // Target hooked
+    this.reeling = false;
+    this.alive = true;
+  }
+
+  update(dt, player) {
+    if (!this.alive) return;
+    const step = dt / FRAME_MS;
+
+    if (this.reeling && this.target) {
+      // Reeling hooked object towards player
+      const dx = player.x - this.target.x;
+      const dy = player.y - this.target.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist < 40) {
+        this.alive = false;
+        return;
+      }
+      const reelSpeed = 16 * step;
+      this.target.x += (dx / dist) * reelSpeed;
+      this.target.y += (dy / dist) * reelSpeed;
+      this.x = this.target.x;
+      this.y = this.target.y;
+    } else {
+      // Flying forward
+      this.x += this.vx * step;
+      this.y += this.vy * step;
+      this.traveled += this.speed * step;
+      if (this.traveled >= this.range) {
+        this.alive = false;
+      }
+    }
+  }
+}
+
+class SinkingShip {
+  constructor(ship, killer) {
+    this.x = ship.x;
+    this.y = ship.y;
+    this.angle = ship.angle;
+    this.def = ship.def || ship.shipDef;
+    this.isPlayer = !!ship.shipDef;
+    this.isBoss = ship.isBoss || false;
+    this.isMiniBoss = ship.isMiniBoss || false;
+    this.length = this.isPlayer ? (ship.shipDef?.size || 42) : ((ship.def?.size || 26) * 1.35);
+    this.width = this.length * 0.44;
+    this.hullColor = this.isPlayer ? (ship.shipDef?.color || '#1b120c') : ship.def.color;
+    this.deckColor = this.isPlayer ? (ship.shipDef?.deckColor || '#452b1a') : '#8b5a2b';
+    this.sailColor = this.isPlayer ? (ship.shipDef?.sailColor || '#e2d9cc') : ship.def.sailColor;
+    this.trimColor = this.isPlayer ? (ship.shipDef?.trimColor || '#eab308') : '#334155';
+    this.isGhost = this.isPlayer ? !!ship.shipDef?.isGhost : !!ship.def?.isGhost;
+
+    this.life = 4500;
+    this.maxLife = 4500;
+    this.sinkProgress = 0; // 0 to 1
+    this.roll = 0; // Roll sideways as water pours in
+    this.rollTarget = (Math.random() > 0.5 ? 1 : -1) * (0.6 + Math.random() * 0.4);
+    this.driftX = (Math.random() - 0.5) * 0.6;
+    this.driftY = (Math.random() - 0.5) * 0.6;
+    this.flameTimer = 0;
+    this.alive = true;
+  }
+
+  update(dt, particles) {
+    this.life -= dt;
+    if (this.life <= 0) {
+      this.alive = false;
+      return;
+    }
+
+    this.sinkProgress = 1 - (this.life / this.maxLife);
+    this.roll += (this.rollTarget - this.roll) * 0.02;
+    this.x += this.driftX;
+    this.y += this.driftY;
+
+    // Erupt continuous fire and billowing black oily smoke while sinking
+    this.flameTimer += dt;
+    if (this.flameTimer > 90) {
+      this.flameTimer = 0;
+      const rx = (Math.random() - 0.5) * this.length * 0.6;
+      const ry = (Math.random() - 0.5) * this.width * 0.6;
+      const fx = this.x + Math.cos(this.angle) * rx - Math.sin(this.angle) * ry;
+      const fy = this.y + Math.sin(this.angle) * rx + Math.cos(this.angle) * ry;
+
+      particles.emit(fx, fy, {
+        count: 4,
+        speedMin: 0.5,
+        speedMax: 2.0,
+        life: 500,
+        sizeMin: 4,
+        sizeMax: 9,
+        color: pick(['#ff4400', '#ff8800', '#ffcc00']),
+        shrink: true,
+      });
+
+      particles.emit(fx, fy, {
+        count: 3,
+        speedMin: 0.5,
+        speedMax: 1.8,
+        life: 1400,
+        sizeMin: 8,
+        sizeMax: 22,
+        color: 'rgba(35, 35, 40, 0.85)',
+        type: 'smoke',
+        grow: true,
+      });
+
+      // Bubbling sea foam around sinking hull
+      if (Math.random() < 0.6) {
+        particles.addRipple(fx, fy, 25, 'rgba(230, 248, 255, 0.7)', 600);
+      }
+    }
   }
 }
 
@@ -88,8 +191,7 @@ class Player {
     this.hull = PLAYER.maxHull;
     this.sail = PLAYER.maxSail;
     this.crew = PLAYER.maxCrew;
-    this.ammoModeIndex = 0;
-    this.ammoType = 'standard';
+    this.ammoType = 'round';
     this.coins = parseInt(localStorage.getItem('blackpearl_coins') || '0', 10);
     this.ownedGuns = JSON.parse(localStorage.getItem('blackpearl_guns') || '[0]');
     if (!this.ownedGuns.includes(0)) this.ownedGuns.push(0);
@@ -108,11 +210,18 @@ class Player {
     this.fireLevel = 0;
     this.vx = 0;
     this.vy = 0;
+    this.speedMag = 0;
+    this.isDrifting = false;
+    this.driftAngleVel = 0;
     this.broadsideCooldown = 0;
     this.maxBroadsideCooldown = 3200;
+    this.harpoonCooldown = 0;
+    this.maxHarpoonCooldown = 2800;
     this.rumFrenzyTimer = 0;
     this.bobPhase = 0;
     this.wakeTimer = 0;
+    this.broadsideRecoil = 0;
+    this.chaserRecoil = 0;
     this.loadUpgrades();
   }
 
@@ -165,29 +274,6 @@ class Player {
 
   get gun() { return GUNS[this.gunIndex] || GUNS[0]; }
 
-  get activeAmmoMode() {
-    const modes = this.gun?.ammoModes;
-    if (modes && modes.length > 0) {
-      return modes[this.ammoModeIndex] || modes[0];
-    }
-    return AMMO.round;
-  }
-
-  setAmmoModeIndex(index) {
-    const maxIdx = (this.gun?.ammoModes?.length || 3) - 1;
-    this.ammoModeIndex = clamp(index, 0, Math.max(0, maxIdx));
-    this.ammoType = this.activeAmmoMode?.id || 'standard';
-  }
-
-  cycleAmmoMode(direction = 1) {
-    const modes = this.gun?.ammoModes;
-    const count = modes && modes.length > 0 ? modes.length : 3;
-    const step = direction > 0 ? 1 : -1;
-    this.ammoModeIndex = (this.ammoModeIndex + step + count) % count;
-    this.ammoType = this.activeAmmoMode?.id || 'standard';
-    return this.ammoModeIndex;
-  }
-
   addCoins(amount) {
     const qmBonus = 1 + (this.crewUpgrades?.quartermaster ? (this.crewUpgrades.quartermaster - 1) * 0.25 : 0);
     const finalAmt = Math.round(amount * qmBonus);
@@ -210,16 +296,12 @@ class Player {
     this.ownedGuns.push(id);
     localStorage.setItem('blackpearl_guns', JSON.stringify(this.ownedGuns));
     this.gunIndex = id;
-    this.ammoModeIndex = 0;
-    this.ammoType = this.activeAmmoMode?.id || 'standard';
     return true;
   }
 
   equipGun(id) {
     if (this.ownedGuns.includes(id)) {
       this.gunIndex = id;
-      this.ammoModeIndex = 0;
-      this.ammoType = this.activeAmmoMode?.id || 'standard';
       return true;
     }
     return false;
@@ -300,7 +382,11 @@ class Player {
     if (this.reloadTimer > 0) this.reloadTimer -= dt;
     if (this.repairCooldown > 0) this.repairCooldown -= dt;
     if (this.broadsideCooldown > 0) this.broadsideCooldown -= dt;
+    if (this.harpoonCooldown > 0) this.harpoonCooldown -= dt;
     if (this.rumFrenzyTimer > 0) this.rumFrenzyTimer -= dt;
+
+    if (this.broadsideRecoil > 0) this.broadsideRecoil = Math.max(0, this.broadsideRecoil - dt * 0.005);
+    if (this.chaserRecoil > 0) this.chaserRecoil = Math.max(0, this.chaserRecoil - dt * 0.006);
 
     this.bobPhase += dt * 0.0035;
 
@@ -313,16 +399,15 @@ class Player {
 
     if (this.repairing) {
       this.repairTimer -= dt;
-      const repairRate = (this.repairAmount / PLAYER.repairDuration) * dt;
-      this.hull = clamp(this.hull + repairRate, 0, this.maxHull);
-      this.sail = clamp(this.sail + repairRate, 0, this.maxSail);
+      this.hull = clamp(this.hull + (this.repairAmount / PLAYER.repairDuration) * dt, 0, this.maxHull);
       if (this.repairTimer <= 0) {
         this.repairing = false;
         this.repairCooldown = this.repairCooldownMax || PLAYER.repairCooldown;
       }
+      return;
     }
 
-    // Direct WASD movement in top-down world
+    // Direct WASD movement with Anchor Drift mechanic
     let mx = 0;
     let my = 0;
     if (input.up) my -= 1;
@@ -332,62 +417,56 @@ class Player {
 
     let moveSpeed = this.effectiveSpeed;
     const isMoving = mx !== 0 || my !== 0;
+    this.isDrifting = !!input.drift;
 
     if (isMoving) {
       const len = Math.hypot(mx, my);
       mx /= len;
       my /= len;
 
-      // Wind mechanic: alignment with wind vector adds tailwind speed
+      // Wind mechanic: tailwind boost
       const windLen = Math.hypot(wind.x, wind.y) || 1;
       const wx = wind.x / windLen;
       const wy = wind.y / windLen;
       const windDot = mx * wx + my * wy;
-      this.windDot = windDot;
       if (windDot > 0.1) {
-        moveSpeed *= (1 + windDot * 0.25);
+        moveSpeed *= (1 + windDot * 0.3);
+      }
+
+      // If drifting, reduce linear speed slightly to convert into intense angular rudder slide
+      if (this.isDrifting) {
+        moveSpeed *= 0.65;
       }
 
       this.x += mx * moveSpeed * step;
       this.y += my * moveSpeed * step;
       this.vx = mx * moveSpeed;
       this.vy = my * moveSpeed;
+      this.speedMag = moveSpeed;
       this.targetAngle = Math.atan2(my, mx);
-    } else if (this.repairing) {
-      // Ship should NOT stop when healing: maintain forward sailing momentum along current heading
-      const hx = Math.cos(this.angle);
-      const hy = Math.sin(this.angle);
-
-      const windLen = Math.hypot(wind.x, wind.y) || 1;
-      const wx = wind.x / windLen;
-      const wy = wind.y / windLen;
-      const windDot = hx * wx + hy * wy;
-      this.windDot = windDot;
-      if (windDot > 0.1) {
-        moveSpeed *= (1 + windDot * 0.25);
-      }
-
-      this.x += hx * moveSpeed * step;
-      this.y += hy * moveSpeed * step;
-      this.vx = hx * moveSpeed;
-      this.vy = hy * moveSpeed;
     } else {
-      this.windDot = 0;
       this.vx = 0;
       this.vy = 0;
+      this.speedMag = 0;
     }
 
-    // If mouse is aiming, the ship steers towards target when stopped or blends
+    // Aim steering blend when stopped
     if (input.targetX != null && input.targetY != null) {
       const aimAngle = Math.atan2(input.targetY - this.y, input.targetX - this.x);
-      if (!isMoving && !this.repairing) {
+      if (!isMoving) {
         this.targetAngle = aimAngle;
       }
     }
 
     const diff = angleDiff(this.angle, this.targetAngle);
-    const turnRateBase = (this.shipDef?.turnRate ? this.shipDef.turnRate * 3.5 : 0.16);
+    let turnRateBase = (this.shipDef?.turnRate ? this.shipDef.turnRate * 3.6 : 0.16);
     const navTurnBonus = 1 + (this.crewUpgrades?.navigator ? (this.crewUpgrades.navigator - 1) * 0.18 : 0);
+
+    // Anchor Drift multiplies turn rate by 2.6x for extreme sharp whip turns!
+    if (this.isDrifting) {
+      turnRateBase *= 2.6;
+    }
+
     this.angle += diff * Math.min(1, turnRateBase * navTurnBonus * step);
 
     const wrapped = wrapWorld(this.x, this.y);
@@ -399,54 +478,40 @@ class Player {
   }
 
   canFire() {
-    return this.alive && this.reloadTimer <= 0 && this.crew > 5;
+    return this.alive && this.reloadTimer <= 0 && !this.repairing && this.crew > 5;
   }
 
   canBroadside() {
-    return this.alive && this.broadsideCooldown <= 0 && this.crew > 10;
+    return this.alive && this.broadsideCooldown <= 0 && !this.repairing && this.crew > 10;
+  }
+
+  canHarpoon() {
+    return this.alive && this.harpoonCooldown <= 0 && !this.repairing;
   }
 
   fire(targetX, targetY) {
     if (!this.canFire()) return [];
     this.reloadTimer = this.reloadTime;
+    this.chaserRecoil = 1.0;
 
     const baseAngle = Math.atan2(targetY - this.y, targetX - this.x);
-    const mode = this.activeAmmoMode;
-    const spread = (mode.spread || 0.04) * (this.gun.spreadMod || 1);
-    const isShotgun = mode.special === 'shotgun' || (mode.pellets && mode.pellets > 2);
-    const isPiercer = mode.special === 'pierce' || (mode.pierce && mode.pierce > 0);
-    // Piercers fire single focused shot (lesser bullets); shotguns fire 1 wide-burst volley
-    const volley = (isShotgun || isPiercer) ? 1 : (this.gun.volley || 1);
+    const ammo = AMMO[this.ammoType];
+    const spread = ammo.spread * this.gun.spreadMod;
+    const volley = this.ammoType === 'grape' ? 1 : (this.gun.volley || 1);
     const perp = baseAngle + Math.PI / 2;
     const projectiles = [];
     const gunnerMod = 1 + (this.crewUpgrades?.gunner ? (this.crewUpgrades.gunner - 1) * 0.15 : 0);
 
     for (let v = 0; v < volley; v++) {
       const along = (v - (volley - 1) / 2) * 12;
-      const sx = this.x + Math.cos(baseAngle) * 30 + Math.cos(perp) * along;
-      const sy = this.y + Math.sin(baseAngle) * 30 + Math.sin(perp) * along;
-      // Piercers have lesser bullets: strictly 1 single high-velocity armor-piercing projectile!
-      const pellets = isPiercer ? 1 : (mode.pellets || 1);
-      for (let i = 0; i < pellets; i++) {
-        const a = baseAngle + (isPiercer ? rand(-0.008, 0.008) : rand(-spread, spread));
-        const p = new Projectile(sx, sy, a, mode.id, 'player', {
+      const sx = this.x + Math.cos(baseAngle) * 32 + Math.cos(perp) * along;
+      const sy = this.y + Math.sin(baseAngle) * 32 + Math.sin(perp) * along;
+      for (let i = 0; i < ammo.pellets; i++) {
+        const a = baseAngle + rand(-spread, spread);
+        projectiles.push(new Projectile(sx, sy, a, this.ammoType, 'player', {
           ...this.gun,
           damage: (this.gun.damage || 1) * gunnerMod,
-        });
-        p.ammo = mode;
-        const speedMult = this.gun.bulletType === 'sniper' ? 1.35 : 1;
-        p.speed = (mode.speed || 22) * speedMult * (isPiercer ? 1.15 : 1);
-        p.vx = Math.cos(a) * p.speed;
-        p.vy = Math.sin(a) * p.speed;
-        // Shotguns are closer ranged!
-        const shotRange = mode.range || (isShotgun ? 285 : (this.gun.range || 600));
-        p.life = (shotRange / p.speed) * FRAME_MS;
-        p.maxLife = p.life;
-        p.pierceCount = mode.pierce || 0;
-        p.special = mode.special || 'standard';
-        p.aoeRadius = mode.aoeRadius || 0;
-        p.isMortar = this.gun.bulletType === 'magma' || mode.special === 'mortar';
-        projectiles.push(p);
+        }));
       }
     }
 
@@ -456,6 +521,7 @@ class Player {
   fireBroadside() {
     if (!this.canBroadside()) return [];
     this.broadsideCooldown = this.maxBroadsideCooldown;
+    this.broadsideRecoil = 1.0;
 
     const projectiles = [];
     const sides = [-Math.PI / 2, Math.PI / 2]; // Port & Starboard
@@ -463,20 +529,20 @@ class Player {
     const shipBonus = this.shipDef?.broadsideBonus || 0;
     const gunsPerSide = 3 + Math.min(this.gunIndex, 3) + extraGuns + shipBonus;
     const gunnerMod = 1 + (this.crewUpgrades?.gunner ? (this.crewUpgrades.gunner - 1) * 0.15 : 0);
-    const bsMod = 1.3 * (1 + extraGuns * 0.15) * gunnerMod;
+    const bsMod = 1.35 * (1 + extraGuns * 0.15) * gunnerMod;
 
     for (const sideOffset of sides) {
       const dirAngle = this.angle + sideOffset;
       for (let g = 0; g < gunsPerSide; g++) {
         const along = (g - (gunsPerSide - 1) / 2) * 14;
-        const sx = this.x + Math.cos(this.angle) * along + Math.cos(dirAngle) * 20;
-        const sy = this.y + Math.sin(this.angle) * along + Math.sin(dirAngle) * 20;
-        const spread = 0.1;
+        const sx = this.x + Math.cos(this.angle) * along + Math.cos(dirAngle) * 22;
+        const sy = this.y + Math.sin(this.angle) * along + Math.sin(dirAngle) * 22;
+        const spread = 0.08;
         const a = dirAngle + rand(-spread, spread);
         const p = new Projectile(sx, sy, a, this.ammoType, 'player', {
           ...this.gun,
           damage: (this.gun.damage || 1) * bsMod,
-          range: (this.gun.range || 600) * 0.95,
+          range: (this.gun.range || 600) * 0.98,
         }, true);
         projectiles.push(p);
       }
@@ -485,8 +551,15 @@ class Player {
     return projectiles;
   }
 
+  fireHarpoon(targetX, targetY) {
+    if (!this.canHarpoon()) return null;
+    this.harpoonCooldown = this.maxHarpoonCooldown;
+    const angle = Math.atan2(targetY - this.y, targetX - this.x);
+    return new Harpoon(this.x, this.y, angle, 'player');
+  }
+
   startRepair() {
-    if (this.repairCooldown > 0 || this.repairing || (this.hull >= this.maxHull && this.sail >= this.maxSail)) return false;
+    if (this.repairCooldown > 0 || this.repairing || this.hull >= this.maxHull) return false;
     this.repairing = true;
     this.repairTimer = PLAYER.repairDuration;
     return true;
@@ -497,19 +570,20 @@ class Player {
     this.hull = clamp(this.hull - hullDmg, 0, this.maxHull);
     this.sail = clamp(this.sail - sailDmg, 0, this.maxSail);
     this.crew = clamp(this.crew - crewDmg, 0, this.maxCrew);
-    this.invuln = 300;
+    this.invuln = 280;
     if (this.hull <= 0) this.alive = false;
   }
 
-  heal(hullAmt, sailAmt = hullAmt) {
+  heal(hullAmt) {
     this.hull = clamp(this.hull + hullAmt, 0, this.maxHull);
+  }
+
+  repairSails(sailAmt) {
     this.sail = clamp(this.sail + sailAmt, 0, this.maxSail);
   }
 
-  restoreCrew(amount) {
-    const before = this.crew;
-    this.crew = clamp(this.crew + amount, 0, this.maxCrew);
-    return Math.round(this.crew - before);
+  restoreCrew(crewAmt) {
+    this.crew = clamp(this.crew + crewAmt, 0, this.maxCrew);
   }
 
   unlockGun(wave) {
@@ -549,6 +623,8 @@ class Enemy {
     this.isBoss = def.isBoss || false;
     this.isMiniBoss = def.isMiniBoss || false;
     this.bobPhase = rand(0, Math.PI * 2);
+    this.recoil = 0;
+    this.tentaclePhase = 0; // For Kraken Dreadnought
   }
 
   get effectiveSpeed() {
@@ -558,12 +634,14 @@ class Enemy {
   }
 
   update(player, dt, world) {
-    if (!this.alive) return;
+    if (!this.alive) return null;
     if (this.slowTimer > 0) this.slowTimer -= dt;
     this.wobble += dt * 0.002;
     this.bobPhase += dt * 0.003;
+    this.tentaclePhase += dt * 0.004;
     this.behaviorTimer += dt;
     this.fireTimer -= dt;
+    if (this.recoil > 0) this.recoil = Math.max(0, this.recoil - dt * 0.005);
 
     const dx = player.x - this.x;
     const dy = player.y - this.y;
@@ -575,7 +653,7 @@ class Enemy {
         this.targetAngle = targetAngle + Math.sin(this.wobble) * 0.8;
         break;
       case 'flank': {
-        const flank = Math.sin(this.behaviorTimer * 0.001) > 0 ? 1.2 : -1.2;
+        const flank = Math.sin(this.behaviorTimer * 0.001) > 0 ? 1.25 : -1.25;
         this.targetAngle = targetAngle + flank;
         break;
       }
@@ -590,7 +668,7 @@ class Enemy {
         this.targetAngle = targetAngle;
         break;
       case 'boss':
-        this.targetAngle = targetAngle + Math.sin(this.wobble * 0.5) * 0.3;
+        this.targetAngle = targetAngle + Math.sin(this.wobble * 0.5) * 0.35;
         break;
     }
 
@@ -604,6 +682,7 @@ class Enemy {
 
     if (this.fireTimer <= 0 && d < this.def.range && this.crew > 5) {
       this.fireTimer = this.def.fireRate;
+      this.recoil = 1.0;
       return this.createProjectile(player);
     }
     return null;
@@ -620,10 +699,10 @@ class Enemy {
       hullDmg: this.def.damage,
       sailDmg: this.def.damage * 0.5,
       crewDmg: this.def.damage * 0.3,
-      speed: this.def.mortar ? 8 : 11,
-      color: this.def.mortar ? '#cc2200' : '#882222',
-      glow: this.def.mortar ? '#ff4400' : '#ff2222',
-      trail: '#ff6644',
+      speed: this.def.mortar ? 8.5 : 12,
+      color: this.def.mortar ? '#cc2200' : (this.def.isGhost ? '#2dd4bf' : '#882222'),
+      glow: this.def.mortar ? '#ff4400' : (this.def.isGhost ? '#14b8a6' : '#ff2222'),
+      trail: this.def.mortar ? '#ff6644' : (this.def.isGhost ? '#5eead4' : '#ff4444'),
     };
     p.speed = p.ammo.speed;
     p.vx = Math.cos(p.angle) * p.speed;
@@ -658,6 +737,7 @@ class LootDrop {
     this.life = 25000;
     this.maxLife = 25000;
     this.bobPhase = rand(0, Math.PI * 2);
+    this.rot = rand(0, Math.PI * 2);
     this.radius = type === 'keg' ? 20 : 16;
     this.alive = true;
   }
@@ -666,6 +746,7 @@ class LootDrop {
     this.life -= dt;
     if (this.life <= 0) this.alive = false;
     this.bobPhase += dt * 0.0035;
+    this.rot += dt * 0.0008;
   }
 }
 
@@ -676,8 +757,8 @@ class FloatingText {
     this.text = text;
     this.color = color;
     this.size = size;
-    this.life = 1300;
-    this.maxLife = 1300;
+    this.life = 1350;
+    this.maxLife = 1350;
     this.vy = -1.6;
   }
 
@@ -696,5 +777,6 @@ class Obstacle {
     this.radius = radius;
     this.type = type; // 'island', 'reef', 'rock'
     this.seed = rand(0, 100);
+    this.surfPhase = rand(0, Math.PI * 2);
   }
 }

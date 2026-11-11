@@ -45,11 +45,10 @@ class UIManager {
       flagshipSubtitleDesc: document.getElementById('flagship-subtitle-desc'),
       crewManifestGrid: document.getElementById('crew-manifest-grid'),
       homeArmoryGrid: document.getElementById('home-armory-grid'),
-      weaponAmmoSelector: document.getElementById('weapon-ammo-selector'),
-      touchAmmoContainer: document.getElementById('touch-ammo-container'),
     };
 
     this._bindButtons();
+    this._bindAmmoButtons();
     this._bindTabs();
   }
 
@@ -65,54 +64,15 @@ class UIManager {
     bind('pause-menu-btn', () => this.onMenu?.());
   }
 
-  updateWeaponAmmoSelector(player) {
-    if (!player) return;
-    const modes = player.gun?.ammoModes || [];
-    const container = this.elements.weaponAmmoSelector;
-    const touchContainer = this.elements.touchAmmoContainer;
-
-    if (container) {
-      container.innerHTML = '';
-      modes.forEach((mode, idx) => {
-        const btn = document.createElement('button');
-        btn.className = `ammo-btn ammo-mode-btn ${player.ammoModeIndex === idx ? 'active' : ''}`;
-        btn.dataset.index = idx.toString();
-        btn.title = `${mode.name} — ${mode.desc}`;
-        btn.innerHTML = `
-          <div class="ammo-top-row">
-            <span class="ammo-icon">${mode.icon || '●'}</span>
-            <span class="ammo-key">[${idx + 1}]</span>
-          </div>
-          <span class="ammo-name">${mode.shortName.replace(/\s*\[\d\]/, '')}</span>
-          <span class="ammo-type-tag ${mode.badgeClass || ''}">${mode.typeTag || 'STANDARD'}</span>
-        `;
-        btn.addEventListener('click', () => {
-          this.onAmmoSwitch?.(idx);
+  _bindAmmoButtons() {
+    document.querySelectorAll('.ammo-btn, .touch-ammo-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const ammo = btn.dataset.ammo;
+        this.onAmmoSwitch?.(ammo);
+        document.querySelectorAll('.ammo-btn, .touch-ammo-btn').forEach(b => {
+          b.classList.toggle('active', b.dataset.ammo === ammo);
         });
-        container.appendChild(btn);
       });
-    }
-
-    if (touchContainer) {
-      touchContainer.innerHTML = '';
-      modes.forEach((mode, idx) => {
-        const btn = document.createElement('button');
-        btn.className = `touch-ammo-btn ${player.ammoModeIndex === idx ? 'active' : ''}`;
-        btn.dataset.index = idx.toString();
-        btn.innerHTML = `${mode.icon || '●'}`;
-        btn.title = mode.name;
-        btn.addEventListener('click', () => {
-          this.onAmmoSwitch?.(idx);
-        });
-        touchContainer.appendChild(btn);
-      });
-    }
-  }
-
-  highlightActiveAmmo(index) {
-    const idxStr = index.toString();
-    document.querySelectorAll('.ammo-mode-btn, .ammo-btn, .touch-ammo-btn').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.index === idxStr);
     });
   }
 
@@ -222,8 +182,7 @@ class UIManager {
       : 100;
     this.elements.reloadBar.style.width = `${reloadPct}%`;
 
-    const activeMode = player.activeAmmoMode;
-    this.elements.gunName.innerHTML = `${player.gun.name} <span class="hud-mode-pill">${activeMode?.name || ''}</span>`;
+    this.elements.gunName.textContent = player.gun.name;
   }
 
   renderQuarterdeck(player) {
@@ -251,9 +210,6 @@ class UIManager {
     if (this.elements.summaryCrew) {
       this.elements.summaryCrew.textContent = `${player.maxCrew} / ${player.maxCrew}`;
     }
-
-    // Refresh active weapon ammo mode selector
-    this.updateWeaponAmmoSelector(player);
 
     // 2. Render Fleet Shipyard Grid
     this.renderFleetShipyard(player);
@@ -372,30 +328,21 @@ class UIManager {
       const card = document.createElement('div');
       card.className = `upgrade-card ${isMax ? 'maxed' : ''}`;
       card.innerHTML = `
-        <div class="upgrade-card-header">
-          <div class="upgrade-icon">${u.icon}</div>
-          <div class="upgrade-identity">
-            <div class="upgrade-name-row">
-              <h3 class="upgrade-name">${u.name}</h3>
-              <span class="level-badge ${isMax ? 'maxed' : ''}">${isMax ? 'MAX KEEL' : `TIER ${lvl}/${u.maxLevel}`}</span>
-            </div>
-            <div class="upgrade-stat-perk">${u.statPerLevel}</div>
+        <div class="upgrade-icon">${u.icon}</div>
+        <div class="upgrade-details">
+          <div class="upgrade-header">
+            <h3>${u.name}</h3>
+            <span class="level-badge">${isMax ? 'MAX TIER' : `TIER ${lvl}/${u.maxLevel}`}</span>
           </div>
-        </div>
-
-        <div class="upgrade-card-body">
           <p class="upgrade-desc">${u.desc}</p>
-          <div class="upgrade-progress-row">
-            <span class="progress-label">REINFORCEMENT TIER:</span>
-            <div class="tier-pips">
-              ${Array.from({ length: u.maxLevel }, (_, i) => `<div class="pip ${i < lvl ? 'active' : ''}"></div>`).join('')}
-            </div>
+          <div class="upgrade-stat-perk">${u.statPerLevel}</div>
+          <div class="tier-pips">
+            ${Array.from({ length: u.maxLevel }, (_, i) => `<div class="pip ${i < lvl ? 'active' : ''}"></div>`).join('')}
           </div>
         </div>
-
-        <div class="upgrade-action-box">
+        <div class="upgrade-action">
           <button class="menu-btn upgrade-btn ${canAfford ? 'primary' : ''}" ${isMax || !canAfford ? 'disabled' : ''}>
-            ${isMax ? 'FULL KEEL REINFORCED' : `UPGRADE KEEL · 🪙 ${formatScore(price)}`}
+            ${isMax ? 'FULL KEEL' : `UPGRADE · 🪙 ${formatScore(price)}`}
           </button>
         </div>
       `;
@@ -425,42 +372,27 @@ class UIManager {
       const card = document.createElement('div');
       card.className = `crew-card ${isMax ? 'maxed' : ''}`;
       card.innerHTML = `
-        <div class="crew-card-header">
-          <div class="crew-avatar-frame">
-            <div class="crew-avatar">${c.avatar}</div>
-            <div class="crew-rank-pip">${isMax ? '👑 MAX' : `★ RANK ${lvl}`}</div>
-          </div>
-          <div class="crew-identity">
-            <h3 class="crew-name">${c.name}</h3>
-            <div class="crew-meta-row">
-              <span class="crew-role-badge">${c.icon} ${c.role}</span>
-              <div class="crew-traits">
-                ${c.traits.map(t => `<span class="trait-tag">${t}</span>`).join('')}
-              </div>
-            </div>
-          </div>
+        <div class="crew-avatar-frame">
+          <div class="crew-avatar">${c.avatar}</div>
+          <div class="crew-rank-pip">★ ${lvl}</div>
         </div>
-
         <div class="crew-card-body">
+          <div class="crew-name-row">
+            <h3 class="crew-name">${c.name}</h3>
+            <span class="crew-role-badge">${c.icon} ${c.role}</span>
+          </div>
+          <div class="crew-traits">
+            ${c.traits.map(t => `<span class="trait-tag">${t}</span>`).join('')}
+          </div>
           <p class="crew-desc">${c.desc}</p>
           <div class="crew-perk-box">
-            <div class="perk-header">
-              <span class="perk-label">OFFICER PERK</span>
-              <span class="perk-status ${lvl > 0 ? 'active' : ''}">${lvl > 0 ? (isMax ? 'MAX POWER' : `TIER ${lvl}`) : 'NOT COMMISSIONED'}</span>
-            </div>
-            <div class="perk-text">${c.perk}</div>
-          </div>
-          <div class="crew-progress-row">
-            <span class="progress-label">OFFICER MASTERY:</span>
-            <div class="tier-pips">
-              ${Array.from({ length: c.maxLevel }, (_, i) => `<div class="pip ${i < lvl ? 'active' : ''}"></div>`).join('')}
-            </div>
+            <span class="perk-label">OFFICER PERK:</span>
+            <span class="perk-text">${c.perk}</span>
           </div>
         </div>
-
-        <div class="crew-action-box">
+        <div class="crew-action-col">
           <button class="menu-btn crew-promote-btn ${canAfford ? 'primary' : ''}" ${isMax || !canAfford ? 'disabled' : ''}>
-            ${isMax ? '★ LEGENDARY OFFICER' : `PROMOTE OFFICER · 🪙 ${formatScore(price)}`}
+            ${isMax ? 'LEGENDARY' : `PROMOTE · 🪙 ${formatScore(price)}`}
           </button>
         </div>
       `;
@@ -502,10 +434,6 @@ class UIManager {
           <div class="stat-col"><span class="lbl">RANGE</span><span class="val">${g.range}</span></div>
           <div class="stat-col"><span class="lbl">VOLLEY</span><span class="val">${g.volley} balls</span></div>
         </div>
-        <div class="weapon-modes-preview">
-          <span class="modes-label">MODES:</span>
-          ${g.ammoModes?.map(m => `<span class="mode-chip ${m.badgeClass || ''}">${m.icon} ${m.name}</span>`).join('') || ''}
-        </div>
         <div class="weapon-footer">
           <button class="menu-btn weapon-action-btn ${isEquipped ? 'equipped-btn' : (isOwned ? 'equip-btn' : (canAfford ? 'primary' : ''))}" ${isEquipped ? 'disabled' : (!isOwned && !canAfford ? 'disabled' : '')}>
             ${isEquipped ? '✓ EQUIPPED' : (isOwned ? 'EQUIP' : `BUY FOR 🪙 ${formatScore(g.price)}`)}
@@ -517,14 +445,12 @@ class UIManager {
         if (!isOwned) {
           if (player.buyGun(g.id)) {
             this.renderQuarterdeck(player);
-            this.updateWeaponAmmoSelector(player);
             if (this.elements.armoryGrid) this.renderWeaponsGrid(this.elements.armoryGrid, player);
             if (window.game?.audio) window.game.audio.play('unlock');
           }
         } else {
           player.equipGun(g.id);
           this.renderQuarterdeck(player);
-          this.updateWeaponAmmoSelector(player);
           if (this.elements.armoryGrid) this.renderWeaponsGrid(this.elements.armoryGrid, player);
           if (window.game?.audio) window.game.audio.play('ui');
         }

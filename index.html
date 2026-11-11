@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>Black Pearl</title>
+  <title>Black Pearl: Lagoon Siege</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=IM+Fell+English:ital@0;1&display=swap" rel="stylesheet">
@@ -60,8 +60,19 @@
 
       <div class="hud-bottom">
         <div class="abilities-row">
-          <div class="ammo-selector" id="weapon-ammo-selector">
-            <!-- Dynamically populated based on active equipped weapon via ui.js -->
+          <div class="ammo-selector">
+            <button class="ammo-btn active" data-ammo="round" title="Round Shot — Hull Penetration">
+              <span class="ammo-icon">●</span>
+              <span class="ammo-name">Round [1]</span>
+            </button>
+            <button class="ammo-btn" data-ammo="chain" title="Chain Shot — Sail Crippling">
+              <span class="ammo-icon">⛓</span>
+              <span class="ammo-name">Chain [2]</span>
+            </button>
+            <button class="ammo-btn" data-ammo="grape" title="Grapeshot — Crew Clearing">
+              <span class="ammo-icon">✦</span>
+              <span class="ammo-name">Grape [3]</span>
+            </button>
           </div>
 
           <div id="broadside-indicator" class="broadside-panel ready" title="Right-Click or E to unleash Port & Starboard Broadsides">
@@ -79,7 +90,7 @@
         </div>
 
         <div class="controls-hint desktop-only">
-          <span>WASD Steer · Mouse Aim · Left-Click/SPACE: Chaser Cannons · Right-Click/E: Broadsides · R Repair · 1-3 Weapon Ordnance Modes</span>
+          <span>WASD Steer · SHIFT Anchor Drift · Mouse Aim · Left-Click/SPACE Chasers · Right-Click/E Broadsides · F Harpoon · R Repair · 1-3 Ammo</span>
         </div>
       </div>
 
@@ -101,9 +112,12 @@
       </div>
       <button id="fire-btn" class="touch-btn fire-btn">CHASER</button>
       <button id="broadside-btn" class="touch-btn broadside-btn">SALVO</button>
+      <button id="harpoon-btn" class="touch-btn harpoon-btn">HARPOON</button>
       <button id="repair-btn" class="touch-btn repair-btn">REPAIR</button>
-      <div class="touch-ammo" id="touch-ammo-container">
-        <!-- Dynamically populated based on active equipped weapon via ui.js -->
+      <div class="touch-ammo">
+        <button class="touch-ammo-btn active" data-ammo="round">●</button>
+        <button class="touch-ammo-btn" data-ammo="chain">⛓</button>
+        <button class="touch-ammo-btn" data-ammo="grape">✦</button>
       </div>
     </div>
 
@@ -127,7 +141,7 @@
             </div>
             <div class="summary-chip" id="chip-speed">
               <span class="chip-label">SPEED</span>
-              <span class="chip-val" id="summary-speed">4.5 kts</span>
+              <span class="chip-val" id="summary-speed">5.5 kts</span>
             </div>
             <div class="summary-chip" id="chip-crew">
               <span class="chip-label">CREW</span>
@@ -205,37 +219,36 @@
 
           <!-- Pane 4: How To Play -->
           <section id="tab-pane-howto" class="qd-pane">
-            <div class="pane-header">
-              <h2>Captain's Orders &amp; Naval Tactics</h2>
-              <p>Master helm navigation, wind vectors, broadside angles, and salvage scavenging to conquer the high seas.</p>
-            </div>
             <div class="howto-grid">
               <div class="howto-section">
-                <h3>Naval Navigation</h3>
+                <h3>Naval Navigation &amp; Drift</h3>
                 <p><kbd>WASD</kbd> — Steer vessel across open lagoon waters</p>
-                <p><kbd>Mouse</kbd> — Aim swivels &amp; ship heading</p>
-                <p><kbd>💨 Wind</kbd> — Catch tailwinds for a 25% surge with foaming bow waves!</p>
+                <p><kbd>SHIFT</kbd> — <strong>Anchor Drift!</strong> Drop anchor to whip around in a sharp 180° power slide with foaming bow spray!</p>
+                <p><kbd>💨 Wind</kbd> — Catch tailwinds for a 30% surge with rushing bow waves!</p>
               </div>
               <div class="howto-section">
-                <h3>Broadsides &amp; Cannons</h3>
+                <h3>Broadsides &amp; Raking Crits</h3>
                 <p><kbd>Left-Click</kbd> or <kbd>SPACE</kbd> — Bow Chaser volleys</p>
                 <p><kbd>Right-Click</kbd> or <kbd>E</kbd> — <strong>Port &amp; Starboard Broadsides</strong> (Devastating flank fire!)</p>
-                <p><kbd>1 / 2 / 3</kbd> or <kbd>Scroll Wheel</kbd> — Switch &amp; rotate weapon ordnance: Piercing Darts, Shotgun Spreads, &amp; Signature Munitions</p>
+                <p>☠ <strong>Crossing the T:</strong> Fire broadsides down the enemy's bow or stern for <strong>2.2x CRITICAL RAKE</strong> damage!</p>
+                <p><kbd>1 / 2 / 3</kbd> — Round (Hull) / Chain (Sails) / Grape (Crew)</p>
               </div>
               <div class="howto-section">
-                <h3>Floating Salvage</h3>
+                <h3>Harpoon &amp; Floating Salvage</h3>
+                <p><kbd>F</kbd> or <kbd>Middle-Click</kbd> — <strong>Iron Harpoon!</strong> Reel in distant treasure or tether enemy vessels!</p>
                 <p>💰 <strong>Treasure Chests</strong> — Doubloons &amp; Combo score</p>
-                <p>⚓ <strong>Timber Planks</strong> — Instant +30 Hull &amp; Sails Repair</p>
-                <p>🧑‍✈️ <strong>Castaway Raft</strong> — Rescues +25 Ship Crew!</p>
+                <p>⚓ <strong>Timber Planks</strong> — Instant +30 Hull Repair</p>
+                <p>⛵ <strong>Canvas Rolls</strong> — Instant +35 Sail Rigging Repair</p>
+                <p>☠ <strong>Castaway Rations</strong> — +25 Crew Recruits &amp; Restoral</p>
                 <p>⚡ <strong>Rum Cask</strong> — 8s Frenzy (Speed &amp; Rapid Fire)</p>
-                <p>💣 <strong>Powder Kegs</strong> — Shoot to trigger chain explosions!</p>
+                <p>💣 <strong>Powder Kegs</strong> — Shoot to trigger chain explosions and burning oil slicks!</p>
               </div>
               <div class="howto-section">
-                <h3>King's Fleet &amp; Bosses</h3>
+                <h3>King's Fleet &amp; Epic Bosses</h3>
                 <p><span class="enemy-tag sloop">Sloop</span> — Fast agile scouts</p>
-                <p><span class="enemy-tag sow">Fire Galley</span> — Flame braziers</p>
-                <p><span class="enemy-tag ketch">Bomb Ketch</span> — Arcing high mortars</p>
-                <p><span class="enemy-tag boss">Flying Dutchman &amp; Leviathan</span> — Epic bosses every 5 waves!</p>
+                <p><span class="enemy-tag sow">Fire Galley</span> — Liquid flame braziers</p>
+                <p><span class="enemy-tag ketch">Bomb Ketch</span> — Arcing high mortar bombs</p>
+                <p><span class="enemy-tag boss">Flying Dutchman &amp; Kraken Dreadnought</span> — Bosses with spectral mist and writhing tentacles!</p>
               </div>
             </div>
           </section>
@@ -267,13 +280,12 @@
             <h3>Broadsides &amp; Cannons</h3>
             <p><kbd>Left Click</kbd> or <kbd>SPACE</kbd> — Bow Chaser volleys</p>
             <p><kbd>Right Click</kbd> or <kbd>E</kbd> — <strong>Port &amp; Starboard Broadsides</strong> (Devastating flank fire!)</p>
-            <p><kbd>1 / 2 / 3</kbd> or <kbd>Scroll Wheel</kbd> — Rotate ammunition modes: Standard, Shotgun, &amp; Piercing</p>
+            <p><kbd>1 / 2 / 3</kbd> — Round (Hull) / Chain (Sails) / Grape (Crew)</p>
           </div>
           <div class="howto-section">
             <h3>Floating Salvage</h3>
             <p>💰 <strong>Treasure Chests</strong> — Score &amp; Combo bonus</p>
-            <p>⚓ <strong>Timber Planks</strong> — Instant +30 Hull &amp; Sails Repair</p>
-            <p>🧑‍✈️ <strong>Castaway Raft</strong> — Rescues +25 Ship Crew!</p>
+            <p>⚓ <strong>Timber Planks</strong> — Instant +30 Hull Repair</p>
             <p>⚡ <strong>Rum Cask</strong> — 8s Frenzy (Speed &amp; Rapid Fire)</p>
             <p>💣 <strong>Powder Kegs</strong> — Shoot to trigger chain explosions!</p>
           </div>

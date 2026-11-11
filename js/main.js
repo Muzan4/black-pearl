@@ -13,6 +13,8 @@ class Game {
     this.projectiles = [];
     this.floatingTexts = [];
     this.lootDrops = [];
+    this.sinkingShips = [];
+    this.harpoons = [];
     this.score = 0;
     this.kills = 0;
     this.combo = 0;
@@ -37,16 +39,10 @@ class Game {
     this.ui.onMenu = () => this.toMenu();
     this.ui.onResume = () => this.resume();
     this.ui.onToggleArmory = () => this.toggleArmory();
-    this.ui.onAmmoSwitch = index => {
+    this.ui.onAmmoSwitch = ammo => {
       if (this.state === 'playing') {
-        const modeIdx = typeof index === 'number' ? index : (index === 'round' ? 0 : index === 'chain' ? 1 : index === 'grape' ? 2 : parseInt(index, 10) || 0);
-        this.player.setAmmoModeIndex(modeIdx);
-        this.ui.highlightActiveAmmo(this.player.ammoModeIndex);
+        this.player.ammoType = ammo;
         this.audio.play('ui');
-        const activeMode = this.player.activeAmmoMode;
-        if (activeMode) {
-          this.floatingTexts.push(new FloatingText(this.player.x, this.player.y - 38, `${activeMode.icon || '●'} ${activeMode.name}`, activeMode.glow || '#facc15', 18));
-        }
       }
     };
   }
@@ -67,24 +63,22 @@ class Game {
 
     this.player.reset();
     this.waves.reset();
+    this.projectiles = [];
+    this.floatingTexts = [];
+    this.lootDrops = [];
+    this.sinkingShips = [];
+    this.harpoons = [];
+    this.particles = new ParticleSystem();
     this.score = 0;
     this.kills = 0;
     this.combo = 0;
     this.comboIndex = 0;
     this.comboTimer = 0;
     this.maxCombo = 1;
-    this.projectiles = [];
-    this.lootDrops = [];
-    this.floatingTexts = [];
-    this.particles = new ParticleSystem();
     this.camera = { x: 0, y: 0 };
     this.waveDelay = 1500;
 
     this.ui.hideAllModals();
-    this.ui.elements.mainMenu.classList.add('hidden');
-    this.ui.elements.hud.classList.remove('hidden');
-    this.ui.elements.touchControls.classList.toggle('hidden', !this.isMobile);
-    this.ui.updateWeaponAmmoSelector(this.player);
     this.ui.hideMenu();
     this.state = 'playing';
 
@@ -143,21 +137,12 @@ class Game {
     };
 
     const ammoSwitch = this.input.consumeAmmoSwitch();
-    const ammoRotate = this.input.consumeAmmoRotate();
-    if (ammoSwitch != null || ammoRotate !== 0) {
-      if (ammoSwitch != null) {
-        const modeIdx = typeof ammoSwitch === 'number' ? ammoSwitch : (ammoSwitch === 'round' ? 0 : ammoSwitch === 'chain' ? 1 : ammoSwitch === 'grape' ? 2 : parseInt(ammoSwitch, 10) || 0);
-        this.player.setAmmoModeIndex(modeIdx);
-      } else if (ammoRotate !== 0) {
-        this.player.cycleAmmoMode(ammoRotate);
-      }
-      this.ui.highlightActiveAmmo(this.player.ammoModeIndex);
+    if (ammoSwitch) {
+      this.player.ammoType = ammoSwitch;
+      document.querySelectorAll('.ammo-btn, .touch-ammo-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.ammo === ammoSwitch);
+      });
       this.audio.play('ui');
-
-      const activeMode = this.player.activeAmmoMode;
-      if (activeMode) {
-        this.floatingTexts.push(new FloatingText(this.player.x, this.player.y - 38, `${activeMode.icon || '●'} ${activeMode.name}`, activeMode.glow || '#facc15', 18));
-      }
     }
 
     if (input.repairPressed) {
@@ -166,32 +151,40 @@ class Game {
         this.particles.emit(this.player.x, this.player.y, {
           count: 14, color: '#a78bfa', life: 800, speedMin: 1, speedMax: 3,
         });
-        this.floatingTexts.push(new FloatingText(this.player.x, this.player.y - 45, '⚓ REPAIRING HULL & SAILS', '#a78bfa', 18));
       }
     }
 
-    // Update Player with wind vector
+    // Update Player with wind vector and anchor drift
     this.player.update(input, dt, this.wind);
 
     // Continuous hydrodynamic wake
     if (this.player.alive && (this.player.vx !== 0 || this.player.vy !== 0)) {
-      this.particles.wake(this.player.x, this.player.y, this.player.angle);
+      this.particles.wake(this.player.x, this.player.y, this.player.angle, this.player.speedMag);
+      this.particles.bowSpray(this.player.x, this.player.y, this.player.angle, this.player.speedMag);
+
+      if (this.player.isDrifting) {
+        this.particles.bowSpray(this.player.x, this.player.y, this.player.angle, 6);
+        if (Math.random() < 0.12) {
+          this.audio.play('drift');
+          this.renderer.shake(1.8);
+        }
+      }
     }
 
-    // Standard Chaser / Swivel Cannons (Mouse / Space)
+    // Standard Chaser Cannons
     if (input.fire && this.player.canFire()) {
       const target = this._getFireTarget(input);
       const newProj = this.player.fire(target.x, target.y);
       if (newProj.length > 0) {
         this.projectiles.push(...newProj);
         const fireAngle = Math.atan2(target.y - this.player.y, target.x - this.player.x);
-        this.particles.cannonFire(this.player.x, this.player.y, fireAngle);
+        this.particles.cannonFire(this.player.x, this.player.y, fireAngle, this.player.gun?.color);
         this.audio.play('cannon');
         this.renderer.shake(3.5);
       }
     }
 
-    // Devastating Port & Starboard Broadsides (Right-Click / 'E')
+    // Broadsides (Right-Click / 'E' / 'Q')
     if (input.broadside && this.player.canBroadside()) {
       const bProj = this.player.fireBroadside();
       if (bProj.length > 0) {
@@ -199,8 +192,51 @@ class Game {
         this.particles.broadsideBlast(this.player.x, this.player.y, this.player.angle - Math.PI / 2);
         this.particles.broadsideBlast(this.player.x, this.player.y, this.player.angle + Math.PI / 2);
         this.audio.play('broadside');
-        this.renderer.shake(8);
+        this.renderer.shake(8.5);
         this.floatingTexts.push(new FloatingText(this.player.x, this.player.y - 30, '⚡ BROADSIDE SALVO!', '#facc15', 20));
+      }
+    }
+
+    // Harpoon Grapple (KeyF or Middle-Click)
+    if (input.harpoon && this.player.canHarpoon()) {
+      const target = this._getFireTarget(input);
+      const h = this.player.fireHarpoon(target.x, target.y);
+      if (h) {
+        this.harpoons.push(h);
+        this.audio.play('harpoon');
+      }
+    }
+
+    // Update Harpoons
+    for (let i = this.harpoons.length - 1; i >= 0; i--) {
+      const h = this.harpoons[i];
+      h.update(dt, this.player);
+      if (!h.alive) {
+        this.harpoons.splice(i, 1);
+        continue;
+      }
+      if (!h.reeling) {
+        // Hook floating salvage
+        for (const loot of this.lootDrops) {
+          if (loot.alive && Math.hypot(h.x - loot.x, h.y - loot.y) < loot.radius + 15) {
+            h.target = loot;
+            h.reeling = true;
+            this.audio.play('harpoon');
+            break;
+          }
+        }
+        if (!h.reeling) {
+          // Hook enemy ships
+          for (const enemy of this.waves.enemies) {
+            if (enemy.alive && Math.hypot(h.x - enemy.x, h.y - enemy.y) < (enemy.def?.size || 25)) {
+              h.target = enemy;
+              h.reeling = true;
+              this.audio.play('harpoon');
+              this.floatingTexts.push(new FloatingText(enemy.x, enemy.y - 25, '⚓ HARPOONED!', '#38bdf8', 18));
+              break;
+            }
+          }
+        }
       }
     }
 
@@ -209,7 +245,19 @@ class Game {
 
     this._updateProjectiles(dt);
     this._updateLoot(dt);
+    this._updateSinkingShips(dt);
     this._checkObstacleCollisions();
+
+    // Ambient lightning in Stormy Shoals
+    if (this.waves.currentLevel.name === 'Stormy Shoals' && Math.random() < 0.003) {
+      this.particles.triggerLightning();
+      this.audio.play('lightning');
+      this.renderer.shake(4.5);
+    }
+
+    // Ambient ocean audio modulation
+    const inTailwind = this.player.speedMag > this.player.effectiveSpeed * 1.05;
+    this.audio.updateAmbient(this.player.speedMag, inTailwind);
 
     if (!this.player.alive) {
       this._gameOver();
@@ -240,7 +288,7 @@ class Game {
       }
     }
 
-    this.particles.update(dt);
+    this.particles.update(dt, this.wind);
     this.floatingTexts.forEach(t => t.update(dt));
     this.floatingTexts = this.floatingTexts.filter(t => t.alive);
 
@@ -250,13 +298,23 @@ class Game {
     this.renderer.updateShake();
     this.ui.updateHUD(this.player, this.score, this.combo, this.comboIndex);
 
-    // Update Broadside button / cooldown indicator in HUD if element exists
+    // Update Broadside HUD
     const bsIndicator = document.getElementById('broadside-indicator');
     if (bsIndicator) {
       const ready = this.player.broadsideCooldown <= 0;
       bsIndicator.classList.toggle('ready', ready);
       const ratio = Math.max(0, 1 - this.player.broadsideCooldown / this.player.maxBroadsideCooldown);
       bsIndicator.style.setProperty('--cd', `${ratio * 100}%`);
+    }
+  }
+
+  _updateSinkingShips(dt) {
+    for (let i = this.sinkingShips.length - 1; i >= 0; i--) {
+      const s = this.sinkingShips[i];
+      s.update(dt, this.particles);
+      if (!s.alive) {
+        this.sinkingShips.splice(i, 1);
+      }
     }
   }
 
@@ -271,7 +329,7 @@ class Game {
 
       // Check pickup collision with player
       const d = Math.hypot(this.player.x - loot.x, this.player.y - loot.y);
-      if (d < 36 && this.player.alive) {
+      if (d < 38 && this.player.alive) {
         loot.alive = false;
         if (loot.type === 'gold') {
           const mult = COMBO_MULTIPLIERS[this.comboIndex] || 1;
@@ -282,20 +340,20 @@ class Game {
           this.audio.play('loot');
           this.particles.emit(loot.x, loot.y, { count: 12, color: '#facc15', life: 600, speedMin: 1, speedMax: 4 });
         } else if (loot.type === 'wood') {
-          this.player.heal(30, 30);
-          this.floatingTexts.push(new FloatingText(loot.x, loot.y - 25, '+30 HULL & SAILS', '#4ade80', 20));
+          this.player.heal(30);
+          this.floatingTexts.push(new FloatingText(loot.x, loot.y - 25, '+30 HULL REPAIR', '#4ade80', 20));
           this.audio.play('loot');
           this.particles.emit(loot.x, loot.y, { count: 12, color: '#4ade80', life: 600, speedMin: 1, speedMax: 3 });
-        } else if (loot.type === 'crew') {
-          const gained = this.player.restoreCrew(25);
-          if (gained > 0) {
-            this.floatingTexts.push(new FloatingText(loot.x, loot.y - 25, `🧑‍✈️ +${gained} CREW RESCUED!`, '#38bdf8', 20));
-          } else {
-            this.score += 250;
-            this.floatingTexts.push(new FloatingText(loot.x, loot.y - 25, '+250 PTS (FULL COMPLEMENT)', '#38bdf8', 18));
-          }
+        } else if (loot.type === 'sail') {
+          this.player.repairSails(35);
+          this.floatingTexts.push(new FloatingText(loot.x, loot.y - 25, '+35 SAIL REPAIR', '#38bdf8', 20));
           this.audio.play('loot');
-          this.particles.emit(loot.x, loot.y, { count: 14, color: '#38bdf8', life: 650, speedMin: 1, speedMax: 3.5 });
+          this.particles.emit(loot.x, loot.y, { count: 14, color: '#38bdf8', life: 600, speedMin: 1, speedMax: 3 });
+        } else if (loot.type === 'crew') {
+          this.player.restoreCrew(25);
+          this.floatingTexts.push(new FloatingText(loot.x, loot.y - 25, '+25 CREW RECRUITS', '#fbbf24', 20));
+          this.audio.play('loot');
+          this.particles.emit(loot.x, loot.y, { count: 14, color: '#fbbf24', life: 600, speedMin: 1, speedMax: 3 });
         } else if (loot.type === 'rum') {
           this.player.rumFrenzyTimer = 8000;
           this.floatingTexts.push(new FloatingText(loot.x, loot.y - 25, '⚡ RUM FRENZY! (8s)', '#c084fc', 22));
@@ -303,7 +361,6 @@ class Game {
           this.renderer.shake(4);
           this.particles.emit(loot.x, loot.y, { count: 18, color: '#c084fc', life: 700, speedMin: 2, speedMax: 5 });
         } else if (loot.type === 'keg') {
-          // Touching a keg detonates it directly!
           this._detonateKeg(loot);
         }
       }
@@ -318,8 +375,8 @@ class Game {
     this.renderer.shake(14);
     this.floatingTexts.push(new FloatingText(keg.x, keg.y - 30, '💥 BOOM! KEG BLAST', '#ef4444', 24));
 
-    const blastRadius = 140;
-    const blastDmg = 175;
+    const blastRadius = 150;
+    const blastDmg = 185;
 
     // Damage enemies in blast radius
     for (const enemy of this.waves.enemies) {
@@ -370,62 +427,49 @@ class Game {
       if (p.owner === 'player') {
         for (const enemy of this.waves.enemies) {
           if (!enemy.alive) continue;
-          if (p.hitEnemies && p.hitEnemies.includes(enemy.id)) continue;
           const d = Math.hypot(p.x - enemy.x, p.y - enemy.y);
           if (d < (enemy.def?.size || 25) * 1.15) {
-            const dmg = p.gun?.damage || 1;
+            // RAKING BROADSIDE CHECK ("Crossing the T")
+            const hitAngle = Math.atan2(p.vy, p.vx);
+            const angleDiffVal = Math.abs(angleDiff(hitAngle, enemy.angle));
+            const isRake = angleDiffVal < 0.45 || Math.abs(angleDiffVal - Math.PI) < 0.45;
+            const rakeMult = isRake ? 2.2 : 1.0;
+
+            const dmg = (p.gun.damage || 1) * rakeMult;
             const killed = enemy.takeDamage(
               p.ammo.hullDmg * dmg,
               p.ammo.sailDmg * dmg,
               p.ammo.crewDmg * dmg,
               p.ammo.slowDuration ? { duration: p.ammo.slowDuration } : null
             );
+            p.alive = false;
 
-            if (p.hitEnemies) p.hitEnemies.push(enemy.id);
-
-            // Life-steal perk (e.g. Kraken Abyssal Tendrils)
-            if (p.ammo.lifeSteal && this.player.alive) {
-              const healAmt = Math.max(1, Math.round(p.ammo.hullDmg * dmg * 0.18));
-              this.player.heal(healAmt);
-              this.floatingTexts.push(new FloatingText(this.player.x, this.player.y - 20, `+${healAmt} Siphon`, '#a855f7', 18));
-            }
-
-            // Chain Lightning perk (e.g. Poseidon Tempest Arc)
-            if (p.ammo.chainLightning) {
-              this._triggerChainLightning(enemy, p.ammo.hullDmg * dmg * 0.6);
-            }
-
-            // AOE explosive shockwave (e.g. Magma Mortar, Cluster, Cataclysm)
-            if (p.aoeRadius > 0) {
-              this._triggerAOEBlast(p.x, p.y, p.aoeRadius, p.ammo.hullDmg * dmg * 0.75, p.ammo.color || '#f97316');
-            }
-
-            // Check piercing
-            if (p.pierceCount > 0) {
-              p.pierceCount--;
-              this.particles.emit(p.x, p.y, { count: 14, color: p.ammo.color || '#38bdf8', life: 400, speedMin: 3, speedMax: 7 });
-              this.audio.play('hit');
-              this.renderer.shake(2.2);
-              this.floatingTexts.push(new FloatingText(enemy.x, enemy.y - 22, `-${Math.round(p.ammo.hullDmg * dmg)} ⚡PIERCED!`, p.ammo.color || '#38bdf8', 22));
+            if (isRake) {
+              this.particles.woodSplinters(enemy.x, enemy.y, p.angle, 20);
+              this.audio.play('rake');
+              this.renderer.shake(7.5);
+              this.floatingTexts.push(new FloatingText(
+                enemy.x, enemy.y - 36,
+                `☠ CRITICAL RAKE! -${Math.round(p.ammo.hullDmg * dmg)} ☠`,
+                '#facc15',
+                22
+              ));
             } else {
-              p.alive = false;
-              this.particles.emit(p.x, p.y, { count: 6, color: p.ammo.color || '#ffd700', life: 300, speedMin: 2, speedMax: 4 });
+              this.particles.woodSplinters(p.x, p.y, p.angle, 6);
+              this.particles.emit(p.x, p.y, { count: 6, color: p.ammo.color, life: 300, speedMin: 2, speedMax: 4 });
               this.audio.play('hit');
-              if (!killed) {
-                this.floatingTexts.push(new FloatingText(enemy.x, enemy.y - 20, `-${Math.round(p.ammo.hullDmg * dmg)}`, '#ff6666'));
-              }
+              this.floatingTexts.push(new FloatingText(enemy.x, enemy.y - 20, `-${Math.round(p.ammo.hullDmg * dmg)}`, '#ff6666'));
             }
 
             if (killed) {
               this._onKill(enemy);
             }
-            if (!p.alive) break;
+            break;
           }
         }
       } else if (p.owner === 'enemy') {
         const d = Math.hypot(p.x - this.player.x, p.y - this.player.y);
-        // If mortar, only damages near impact landing
-        const hitDist = p.isMortar ? 45 : (PLAYER.size * 0.85);
+        const hitDist = p.isMortar ? 48 : (PLAYER.size * 0.88);
         if (d < hitDist && (!p.isMortar || p.z < 8)) {
           this.player.takeDamage(p.ammo.hullDmg, p.ammo.sailDmg, p.ammo.crewDmg);
           p.alive = false;
@@ -444,7 +488,7 @@ class Game {
       const obs = this.waves.checkObstacleCollision(p.x, p.y, 6);
       if (obs) {
         p.alive = false;
-        this.particles.splash(p.x, p.y, 1);
+        this.particles.splash(p.x, p.y, 1.2);
         this.audio.play('splash');
       }
     }
@@ -486,7 +530,12 @@ class Game {
     const baseCoins = enemy.isBoss ? 450 : (enemy.isMiniBoss ? 160 : 35);
     const coinsEarned = this.player.addCoins(Math.round(baseCoins * mult));
 
+    // Spawn authentic sinking ship sequence!
+    this.sinkingShips.push(new SinkingShip(enemy, this.player));
+
     this.particles.explosion(enemy.x, enemy.y, enemy.isBoss ? 2.8 : enemy.isMiniBoss ? 1.8 : 1.2);
+    this.particles.addSinkingDebris(enemy.x, enemy.y, enemy.isBoss ? 8 : 4);
+    this.audio.play('sink');
     this.audio.play('explosion');
     this.renderer.shake(enemy.isBoss ? 14 : enemy.isMiniBoss ? 9 : 5.5);
 
@@ -498,9 +547,9 @@ class Game {
       20
     ));
 
-    // Spawn floating salvage loot drops!
-    const dropTypes = ['gold', 'gold', 'wood', 'crew', 'rum', 'keg'];
-    const dropCount = enemy.isBoss ? 4 : enemy.isMiniBoss ? 2 : 1;
+    // Spawn floating salvage loot drops
+    const dropTypes = ['gold', 'gold', 'wood', 'sail', 'crew', 'rum', 'keg'];
+    const dropCount = enemy.isBoss ? 5 : enemy.isMiniBoss ? 3 : 2;
 
     for (let i = 0; i < dropCount; i++) {
       const type = enemy.isBoss && i === 0 ? 'rum' : pick(dropTypes);
@@ -511,44 +560,6 @@ class Game {
         enemy.y + Math.sin(angle) * dist,
         type
       ));
-    }
-  }
-
-  _triggerChainLightning(sourceEnemy, dmg) {
-    let chains = 0;
-    const maxChains = 3;
-    for (const other of this.waves.enemies) {
-      if (other !== sourceEnemy && other.alive) {
-        const d = Math.hypot(other.x - sourceEnemy.x, other.y - sourceEnemy.y);
-        if (d < 240) {
-          const killed = other.takeDamage(dmg, dmg * 0.5, dmg * 0.5);
-          this.floatingTexts.push(new FloatingText(other.x, other.y - 20, `⚡ -${Math.round(dmg)}`, '#06b6d4', 18));
-          this.particles.emit((sourceEnemy.x + other.x) / 2, (sourceEnemy.y + other.y) / 2, {
-            count: 8,
-            color: '#06b6d4',
-            life: 300,
-            speedMin: 3,
-            speedMax: 6,
-          });
-          if (killed) this._onKill(other);
-          chains++;
-          if (chains >= maxChains) break;
-        }
-      }
-    }
-  }
-
-  _triggerAOEBlast(x, y, radius, dmg, color) {
-    this.particles.explosion(x, y, 1.4);
-    this.renderer.shake(5);
-    for (const enemy of this.waves.enemies) {
-      if (!enemy.alive) continue;
-      const d = Math.hypot(enemy.x - x, enemy.y - y);
-      if (d < radius) {
-        const killed = enemy.takeDamage(dmg, dmg * 0.4, dmg * 0.4);
-        this.floatingTexts.push(new FloatingText(enemy.x, enemy.y - 20, `💥 -${Math.round(dmg)}`, color, 18));
-        if (killed) this._onKill(enemy);
-      }
     }
   }
 
@@ -571,42 +582,52 @@ class Game {
     const level = this.waves.currentLevel;
     this.renderer.clear();
 
-    // 1. Pure Top-Down Ocean & Atmosphere
+    // 1. Dynamic Ocean Water & Atmosphere
     this.renderer.drawBackground(level, this.camera, this.time, this.wind);
 
-    // 2. Top-Down Islands & Obstacles
+    // 2. Islands & Reef Atolls
     this.renderer.drawObstacles(this.waves.obstacles, this.camera);
 
-    // 3. Floating Salvage & Loot
+    // 3. Sinking Ships (Listed & burning on the sea)
+    for (const sinking of this.sinkingShips) {
+      this.renderer.drawSinkingShip(sinking, this.camera);
+    }
+
+    // 4. Floating Salvage & Loot
     this.renderer.drawLoot(this.lootDrops, this.camera);
 
-    // 4. Enemy Ships (Top-Down)
+    // 5. Enemy Ships
     for (const enemy of this.waves.enemies) {
       this.renderer.drawShip(enemy, this.camera, false);
     }
 
-    // 5. Player Ship (Top-Down)
+    // 6. Player Ship
     if (this.player.alive && (this.state === 'playing' || this.state === 'paused')) {
       const target = this.input.getWorldTarget(this.camera);
       this.renderer.drawAimIndicator(this.player, this.camera, target.x, target.y);
       this.renderer.drawShip(this.player, this.camera, true);
     }
 
-    // 6. Projectiles
+    // 7. Active Harpoon Cables
+    for (const h of this.harpoons) {
+      this.renderer.drawHarpoon(h, this.player, this.camera);
+    }
+
+    // 8. Projectiles (3D Cannonballs & Mortars)
     this.renderer.drawAllProjectiles(this.projectiles, this.camera);
 
-    // 7. Dynamic Particles & Ripples
+    // 9. Dynamic Particles & VFX
     this.particles.draw(this.renderer.ctx, this.camera);
 
-    // 8. Floating Combat & Loot Texts
+    // 10. Floating Combat & Loot Texts
     this.renderer.drawFloatingTexts(this.floatingTexts, this.camera);
 
-    // 9. Tactical Nautical Radar Minimap
+    // 11. Nautical Radar Compass Minimap
     if (this.state === 'playing' || this.state === 'paused') {
       this.renderer.drawMinimap(this.player, this.waves.enemies, this.waves.obstacles, this.lootDrops, this.wind);
     }
 
-    // 10. Custom Aim Crosshair
+    // 12. Custom Aim Reticle
     if (this.state === 'playing') {
       const target = this.input.getWorldTarget(this.camera);
       this.renderer.drawCustomCursor(target.x, target.y, this.camera, this.player, this.time);

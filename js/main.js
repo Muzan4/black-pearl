@@ -29,8 +29,23 @@ class Game {
     this.windAngle = -0.6;
 
     this._bindUI();
+    this._initBurstHandler();
     this.ui.showMenu(this.player);
     requestAnimationFrame(t => this.loop(t));
+  }
+
+  _initBurstHandler() {
+    this.player.onBurstFire = (targetX, targetY) => {
+      if (this.state !== 'playing' || !this.player.alive) return;
+      const p = this.player.fireSingleBurstShot(targetX, targetY);
+      if (p) {
+        this.projectiles.push(p);
+        const fireAngle = Math.atan2(targetY - this.player.y, targetX - this.player.x);
+        this.particles.cannonFireChain(this.player.x, this.player.y, fireAngle, this.player.gun?.color);
+        this.audio.play('cannon_chain');
+        this.renderer.shake(2.0);
+      }
+    };
   }
 
   _bindUI() {
@@ -144,11 +159,11 @@ class Game {
       });
       this.audio.play('ammo_switch', { ammo: ammoSwitch });
       if (ammoSwitch === 'round') {
-        this.floatingTexts.push(new FloatingText(this.player.x, this.player.y - 36, '● [1] ROUND SHOT LOADED (Heavy Hull Breaker)', '#f97316', 18));
+        this.floatingTexts.push(new FloatingText(this.player.x, this.player.y - 36, '● [1] HEAVY SINGLE SHOT (High Damage, Medium Range)', '#f97316', 18));
       } else if (ammoSwitch === 'chain') {
-        this.floatingTexts.push(new FloatingText(this.player.x, this.player.y - 36, '⛓ [2] CHAIN SHOT LOADED (Sail Crippler & Slow)', '#fde047', 18));
+        this.floatingTexts.push(new FloatingText(this.player.x, this.player.y - 36, '⦾ [2] 3-ROUND BURST (Rapid Salvo, High Accuracy)', '#38bdf8', 18));
       } else if (ammoSwitch === 'grape') {
-        this.floatingTexts.push(new FloatingText(this.player.x, this.player.y - 36, '✦ [3] GRAPESHOT LOADED (Crew Sweeper Spread)', '#ef4444', 18));
+        this.floatingTexts.push(new FloatingText(this.player.x, this.player.y - 36, '✦ [3] SHOTGUN SPREAD (Massive Point-Blank Cone, Short Range)', '#ef4444', 18));
       }
     }
 
@@ -220,17 +235,17 @@ class Game {
           this.audio.play('cannon_chain');
           this.audio.play('broadside');
           this.renderer.shake(7.5);
-          this.floatingTexts.push(new FloatingText(this.player.x, this.player.y - 30, '⛓ DEMASTING CHAIN BROADSIDE!', '#fde047', 20));
+          this.floatingTexts.push(new FloatingText(this.player.x, this.player.y - 30, '⦾ 3-BURST BROADSIDE SALVO!', '#38bdf8', 20));
         } else if (ammoType === 'grape') {
           this.audio.play('cannon_grape');
           this.audio.play('broadside');
           this.renderer.shake(9.5);
-          this.floatingTexts.push(new FloatingText(this.player.x, this.player.y - 30, '✦ SHRAPNEL STORM BROADSIDE!', '#ef4444', 20));
+          this.floatingTexts.push(new FloatingText(this.player.x, this.player.y - 30, '✦ SHOTGUN FLAK BROADSIDE!', '#ef4444', 20));
         } else {
           this.audio.play('cannon_round');
           this.audio.play('broadside');
           this.renderer.shake(8.8);
-          this.floatingTexts.push(new FloatingText(this.player.x, this.player.y - 30, '⚡ THUNDEROUS SIEGE BROADSIDE!', '#facc15', 20));
+          this.floatingTexts.push(new FloatingText(this.player.x, this.player.y - 30, '⚡ HEAVY DEMOLITION BROADSIDE!', '#facc15', 20));
         }
       }
     }
@@ -503,22 +518,23 @@ class Game {
                 22
               ));
             } else {
+              const totalHitDmg = Math.round(p.ammo.hullDmg * dmg);
               if (p.ammoType === 'chain') {
                 this.particles.sailShred(p.x, p.y, p.angle);
                 this.audio.play('impact_chain');
-                this.renderer.shake(2.5);
-                this.floatingTexts.push(new FloatingText(enemy.x, enemy.y - 20, `⛓ -${Math.round(p.ammo.sailDmg * dmg)} SAILS! [SLOWED]`, '#38bdf8', 16));
+                this.renderer.shake(2.0);
+                this.floatingTexts.push(new FloatingText(enemy.x, enemy.y - 20, `⦾ -${totalHitDmg}`, '#38bdf8', 16));
               } else if (p.ammoType === 'grape') {
                 this.particles.crewDecimate(p.x, p.y, p.angle);
                 this.audio.play('impact_grape');
-                this.renderer.shake(2.8);
-                this.floatingTexts.push(new FloatingText(enemy.x, enemy.y - 20, `☠ -${Math.round(p.ammo.crewDmg * dmg)} CREW!`, '#ec4899', 16));
+                this.renderer.shake(2.2);
+                this.floatingTexts.push(new FloatingText(enemy.x, enemy.y - 20, `✦ -${totalHitDmg}`, '#ef4444', 16));
               } else {
                 this.particles.woodSplinters(p.x, p.y, p.angle, 14);
                 this.particles.emit(p.x, p.y, { count: 8, color: '#f97316', life: 350, speedMin: 2, speedMax: 6 });
                 this.audio.play('impact_round');
-                this.renderer.shake(4.2);
-                this.floatingTexts.push(new FloatingText(enemy.x, enemy.y - 20, `💥 -${Math.round(p.ammo.hullDmg * dmg)} HULL`, '#f97316', 17));
+                this.renderer.shake(4.5);
+                this.floatingTexts.push(new FloatingText(enemy.x, enemy.y - 20, `💥 -${totalHitDmg} HEAVY!`, '#f97316', 18));
               }
             }
 

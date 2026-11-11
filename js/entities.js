@@ -216,6 +216,7 @@ class Player {
     this.vx = 0;
     this.vy = 0;
     this.speedMag = 0;
+    this.burstQueue = [];
     this.shieldActive = false;
     this.shieldDuration = 0;
     this.maxShieldDuration = 4000;
@@ -408,6 +409,19 @@ class Player {
     if (this.broadsideRecoil > 0) this.broadsideRecoil = Math.max(0, this.broadsideRecoil - dt * 0.005);
     if (this.chaserRecoil > 0) this.chaserRecoil = Math.max(0, this.chaserRecoil - dt * 0.006);
 
+    // Rapid Burst Fire queue processing (Mode 2)
+    if (this.burstQueue && this.burstQueue.length > 0) {
+      for (let i = this.burstQueue.length - 1; i >= 0; i--) {
+        this.burstQueue[i].delay -= dt;
+        if (this.burstQueue[i].delay <= 0) {
+          const item = this.burstQueue.splice(i, 1)[0];
+          if (this.onBurstFire) {
+            this.onBurstFire(item.targetX, item.targetY);
+          }
+        }
+      }
+    }
+
     this.bobPhase += dt * 0.0035;
 
     // Passive surgeon health and crew regeneration
@@ -503,27 +517,73 @@ class Player {
     this.chaserRecoil = 1.0;
 
     const baseAngle = Math.atan2(targetY - this.y, targetX - this.x);
-    const ammo = AMMO[this.ammoType];
-    const spread = ammo.spread * this.gun.spreadMod;
-    const volley = this.ammoType === 'grape' ? 1 : (this.gun.volley || 1);
-    const perp = baseAngle + Math.PI / 2;
+    const ammo = AMMO[this.ammoType] || AMMO.round;
     const projectiles = [];
     const gunnerMod = 1 + (this.crewUpgrades?.gunner ? (this.crewUpgrades.gunner - 1) * 0.15 : 0);
+    const gunDmg = (this.gun.damage || 1) * gunnerMod;
+    const sx = this.x + Math.cos(baseAngle) * 32;
+    const sy = this.y + Math.sin(baseAngle) * 32;
 
-    for (let v = 0; v < volley; v++) {
-      const along = (v - (volley - 1) / 2) * 12;
-      const sx = this.x + Math.cos(baseAngle) * 32 + Math.cos(perp) * along;
-      const sy = this.y + Math.sin(baseAngle) * 32 + Math.sin(perp) * along;
-      for (let i = 0; i < ammo.pellets; i++) {
-        const a = baseAngle + rand(-spread, spread);
-        projectiles.push(new Projectile(sx, sy, a, this.ammoType, 'player', {
+    if (ammo.mode === 'single') {
+      // 1. Heavy Single Shot: exactly 1 high-damage bullet at medium range
+      const a = baseAngle + rand(-ammo.spread, ammo.spread);
+      projectiles.push(new Projectile(sx, sy, a, 'round', 'player', {
+        ...this.gun,
+        damage: gunDmg,
+        range: ammo.range,
+        speed: ammo.speed,
+        bulletType: this.gun.bulletType || 'iron',
+      }));
+    } else if (ammo.mode === 'burst') {
+      // 2. Burst Fire: 3-round rapid sequential burst
+      const a1 = baseAngle + rand(-ammo.spread, ammo.spread);
+      projectiles.push(new Projectile(sx, sy, a1, 'chain', 'player', {
+        ...this.gun,
+        damage: gunDmg,
+        range: ammo.range,
+        speed: ammo.speed,
+        bulletType: this.gun.bulletType || 'iron',
+      }));
+      // Queue 2nd and 3rd bullets in rapid succession
+      this.burstQueue = [
+        { delay: ammo.burstDelay || 65, targetX, targetY },
+        { delay: (ammo.burstDelay || 65) * 2, targetX, targetY },
+      ];
+    } else if (ammo.mode === 'shotgun') {
+      // 3. Shotgun Spread: 8 pellets in expanding cone, short range
+      const pellets = ammo.bullets || 8;
+      for (let i = 0; i < pellets; i++) {
+        const a = baseAngle + rand(-ammo.spread, ammo.spread);
+        projectiles.push(new Projectile(sx, sy, a, 'grape', 'player', {
           ...this.gun,
-          damage: (this.gun.damage || 1) * gunnerMod,
+          damage: gunDmg,
+          range: ammo.range * rand(0.85, 1.15),
+          speed: ammo.speed * rand(0.9, 1.1),
+          bulletType: this.gun.bulletType || 'iron',
         }));
       }
     }
 
     return projectiles;
+  }
+
+  fireSingleBurstShot(targetX, targetY) {
+    if (!this.alive) return null;
+    const baseAngle = Math.atan2(targetY - this.y, targetX - this.x);
+    const ammo = AMMO.chain;
+    const gunnerMod = 1 + (this.crewUpgrades?.gunner ? (this.crewUpgrades.gunner - 1) * 0.15 : 0);
+    const gunDmg = (this.gun.damage || 1) * gunnerMod;
+    const sx = this.x + Math.cos(baseAngle) * 32;
+    const sy = this.y + Math.sin(baseAngle) * 32;
+    const a = baseAngle + rand(-ammo.spread, ammo.spread);
+    this.chaserRecoil = 0.6;
+    return new Projectile(sx, sy, a, 'chain', 'player', {
+      ...this.gun,
+      damage: gunDmg,
+      range: ammo.range,
+      speed: ammo.speed,
+      bulletType: this.gun.bulletType || 'iron',
+    });
   }
 
   fireBroadside() {
@@ -539,10 +599,11 @@ class Player {
     const gunnerMod = 1 + (this.crewUpgrades?.gunner ? (this.crewUpgrades.gunner - 1) * 0.15 : 0);
     const bsMod = 1.35 * (1 + extraGuns * 0.15) * gunnerMod;
 
-    const isGrape = this.ammoType === 'grape';
-    const isChain = this.ammoType === 'chain';
-    const pelletsPerGun = isGrape ? 4 : 1;
-    const baseSpread = isGrape ? 0.22 : (isChain ? 0.05 : 0.08);
+    const ammo = AMMO[this.ammoType] || AMMO.round;
+    const isShotgun = ammo.mode === 'shotgun';
+    const isBurst = ammo.mode === 'burst';
+    const pelletsPerGun = isShotgun ? 4 : 1;
+    const baseSpread = isShotgun ? 0.22 : (isBurst ? 0.04 : 0.06);
 
     for (const sideOffset of sides) {
       const dirAngle = this.angle + sideOffset;
@@ -554,8 +615,10 @@ class Player {
           const a = dirAngle + rand(-baseSpread, baseSpread);
           const p = new Projectile(sx, sy, a, this.ammoType, 'player', {
             ...this.gun,
-            damage: (this.gun.damage || 1) * bsMod * (isGrape ? 0.65 : 1),
-            range: (this.gun.range || 600) * 0.98,
+            damage: (this.gun.damage || 1) * bsMod * (isShotgun ? 0.75 : 1),
+            range: (ammo.range || 600) * 0.95,
+            speed: ammo.speed || 24,
+            bulletType: this.gun.bulletType || 'iron',
           }, true);
           projectiles.push(p);
         }
@@ -647,8 +710,13 @@ class Enemy {
     this.angle = angle;
     this.hull = def.hull * waveMultiplier;
     this.maxHull = this.hull;
+    this.ghostHull = this.hull;
+    this.ghostLagTimer = 0;
+    this.hitFlashTimer = 0;
     this.sail = def.sail;
+    this.maxSail = def.sail;
     this.crew = def.crew;
+    this.maxCrew = def.crew;
     this.speed = def.speed;
     this.alive = true;
     this.fireTimer = rand(500, def.fireRate);
@@ -665,13 +733,22 @@ class Enemy {
 
   get effectiveSpeed() {
     const slow = this.slowTimer > 0 ? 0.5 : 1;
-    const sailMod = 0.3 + 0.7 * (this.sail / this.def.sail);
+    const sailMod = 0.3 + 0.7 * (this.sail / (this.maxSail || this.def.sail));
     return this.speed * slow * sailMod;
   }
 
   update(player, dt, world) {
     if (!this.alive) return null;
     if (this.slowTimer > 0) this.slowTimer -= dt;
+    if (this.hitFlashTimer > 0) this.hitFlashTimer -= dt;
+
+    // Smooth ghost health trailing animation
+    if (this.ghostLagTimer > 0) {
+      this.ghostLagTimer -= dt;
+    } else if (this.ghostHull > this.hull) {
+      this.ghostHull = Math.max(this.hull, this.ghostHull - (this.maxHull * (dt / 550)));
+    }
+
     this.wobble += dt * 0.002;
     this.bobPhase += dt * 0.003;
     this.tentaclePhase += dt * 0.004;
@@ -750,9 +827,11 @@ class Enemy {
   }
 
   takeDamage(hullDmg, sailDmg, crewDmg, chainEffect) {
-    this.hull -= hullDmg;
-    this.sail = clamp(this.sail - sailDmg, 0, this.def.sail);
-    this.crew = clamp(this.crew - crewDmg, 0, this.def.crew);
+    this.hull = Math.max(0, this.hull - hullDmg);
+    this.sail = clamp(this.sail - sailDmg, 0, this.maxSail || this.def.sail);
+    this.crew = clamp(this.crew - crewDmg, 0, this.maxCrew || this.def.crew);
+    this.ghostLagTimer = 420; // 420ms delay before ghost bar catches up
+    this.hitFlashTimer = 110; // bright flash on hit
     if (chainEffect) {
       this.slowTimer = chainEffect.duration;
     }

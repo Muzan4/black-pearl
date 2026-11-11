@@ -838,23 +838,133 @@ class Renderer {
 
     // 13. ENEMY OVERHEAD HEALTH BAR
     if (!isPlayer) {
-      const barW = length * 1.25;
-      const hp = Math.max(0, ship.hull / ship.maxHull);
-      ctx.fillStyle = 'rgba(4, 10, 20, 0.85)';
-      ctx.fillRect(s.x - barW / 2, s.y - length * 0.75 - 14, barW, 6.5);
-      ctx.fillStyle = hp > 0.5 ? '#22c55e' : hp > 0.25 ? '#eab308' : '#ef4444';
-      ctx.fillRect(s.x - barW / 2, s.y - length * 0.75 - 14, barW * hp, 6.5);
-      ctx.strokeStyle = '#020617';
-      ctx.lineWidth = 1.2;
-      ctx.strokeRect(s.x - barW / 2, s.y - length * 0.75 - 14, barW, 6.5);
-
-      if (ship.isBoss) {
-        ctx.fillStyle = '#ffd700';
-        ctx.font = 'bold 12px Cinzel, serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(ship.def.name.toUpperCase(), s.x, s.y - length * 0.75 - 20);
-      }
+      this.drawEnemyHealthBar(ship, s, length);
     }
+  }
+
+  /**
+   * PROPERLY WELL-THOUGHT ENEMY HEALTH BAR
+   * Segmented Hull with Ghost Damage Trail, Sails bar, Crew bar, and Elite/Boss crests
+   */
+  drawEnemyHealthBar(ship, s, length) {
+    const ctx = this.ctx;
+    const isBoss = ship.isBoss;
+    const isMiniBoss = ship.isMiniBoss;
+
+    // Dimensions
+    const barW = isBoss ? 120 : (isMiniBoss ? 88 : Math.max(54, length * 1.35));
+    const barH = isBoss ? 10 : (isMiniBoss ? 8 : 6.5);
+    const topY = s.y - length * 0.75 - (isBoss ? 32 : (isMiniBoss ? 26 : 20));
+
+    const curHp = Math.max(0, ship.hull);
+    const maxHp = ship.maxHull || 100;
+    const hpRatio = clamp(curHp / maxHp, 0, 1);
+    const ghostRatio = clamp((ship.ghostHull !== undefined ? ship.ghostHull : curHp) / maxHp, 0, 1);
+
+    ctx.save();
+
+    // 1. Boss / Elite Badges & Titles
+    if (isBoss) {
+      ctx.fillStyle = '#ffd700';
+      ctx.font = 'bold 11px Cinzel, serif';
+      ctx.textAlign = 'center';
+      ctx.shadowColor = '#f59e0b';
+      ctx.shadowBlur = 8;
+      ctx.fillText(`👑 ${ship.def.name.toUpperCase()}`, s.x, topY - 7);
+      ctx.shadowBlur = 0;
+    } else if (isMiniBoss) {
+      ctx.fillStyle = '#f97316';
+      ctx.font = 'bold 10px Cinzel, serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(`☠ ELITE ${ship.def.name.toUpperCase()}`, s.x, topY - 6);
+    }
+
+    // Status debuff tags
+    if (ship.slowTimer > 0) {
+      ctx.fillStyle = '#38bdf8';
+      ctx.font = 'bold 9px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('❄ SLOWED', s.x + barW / 2 + 5, topY + barH * 0.8);
+    } else if (ship.sail <= 0) {
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = 'bold 9px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('⛵ DEMASTED', s.x + barW / 2 + 5, topY + barH * 0.8);
+    }
+
+    // 2. Bar Background Plate
+    ctx.fillStyle = 'rgba(6, 12, 24, 0.92)';
+    ctx.fillRect(s.x - barW / 2 - 2, topY - 2, barW + 4, barH + 4);
+
+    // 3. Trailing Ghost Health Bar (damage indicator lag)
+    if (ghostRatio > hpRatio) {
+      ctx.fillStyle = '#fef08a'; // Bright amber/white damage trail
+      ctx.fillRect(s.x - barW / 2, topY, barW * ghostRatio, barH);
+    }
+
+    // 4. Current Hull Health Bar (Gradient Fill)
+    let hpColor1 = '#22c55e';
+    let hpColor2 = '#16a34a';
+    if (hpRatio <= 0.25) {
+      hpColor1 = '#ef4444';
+      hpColor2 = '#991b1b';
+    } else if (hpRatio <= 0.5) {
+      hpColor1 = '#facc15';
+      hpColor2 = '#ca8a04';
+    }
+
+    // Hit flash
+    if (ship.hitFlashTimer > 0) {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(s.x - barW / 2, topY, barW * hpRatio, barH);
+    } else {
+      const grad = ctx.createLinearGradient(s.x - barW / 2, topY, s.x - barW / 2, topY + barH);
+      grad.addColorStop(0, hpColor1);
+      grad.addColorStop(1, hpColor2);
+      ctx.fillStyle = grad;
+      ctx.fillRect(s.x - barW / 2, topY, barW * hpRatio, barH);
+    }
+
+    // Health pips / segment dividers
+    const segments = isBoss ? 4 : (isMiniBoss ? 3 : 2);
+    ctx.fillStyle = 'rgba(2, 6, 23, 0.7)';
+    for (let seg = 1; seg < segments; seg++) {
+      const sx = s.x - barW / 2 + (barW / segments) * seg;
+      ctx.fillRect(sx - 0.5, topY, 1, barH);
+    }
+
+    // 5. Outer Frame Border
+    ctx.strokeStyle = isBoss ? '#ca8a04' : (isMiniBoss ? '#f97316' : '#1e293b');
+    ctx.lineWidth = isBoss ? 2 : 1.2;
+    ctx.strokeRect(s.x - barW / 2, topY, barW, barH);
+
+    // 6. Sub-Bars: Sails (Cyan) & Crew (Coral)
+    const subH = 2.5;
+    const subY = topY + barH + 2;
+    const halfW = (barW - 3) / 2;
+
+    const sailRatio = clamp(ship.sail / (ship.maxSail || ship.def.sail || 50), 0, 1);
+    const crewRatio = clamp(ship.crew / (ship.maxCrew || ship.def.crew || 50), 0, 1);
+
+    // Sails bar
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.8)';
+    ctx.fillRect(s.x - barW / 2, subY, halfW, subH);
+    ctx.fillStyle = '#38bdf8';
+    ctx.fillRect(s.x - barW / 2, subY, halfW * sailRatio, subH);
+
+    // Crew bar
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.8)';
+    ctx.fillRect(s.x - barW / 2 + halfW + 3, subY, halfW, subH);
+    ctx.fillStyle = '#ec4899';
+    ctx.fillRect(s.x - barW / 2 + halfW + 3, subY, halfW * crewRatio, subH);
+
+    // 7. Numeric Health Label
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `bold ${isBoss ? 9 : 8}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText(`${Math.ceil(curHp)}/${Math.ceil(maxHp)}`, s.x, topY + barH - 1.5);
+
+    ctx.restore();
   }
 
   /**
@@ -991,65 +1101,51 @@ class Renderer {
       ctx.save();
 
       if (isChain) {
-        // --- CHAIN SHOT: DUAL INTERWOVEN SPIRAL HELIX WAKE ---
-        const armDist = 15;
-        // Trail 1 (Weight A)
-        ctx.strokeStyle = '#facc15';
-        ctx.lineCap = 'round';
-        for (let i = 1; i < p.trail.length; i++) {
-          const pt0 = p.trail[i - 1];
-          const pt1 = p.trail[i];
-          const s0 = this._worldToScreen(pt0.x, pt0.y, camera);
-          const s1 = this._worldToScreen(pt1.x, pt1.y, camera);
-          const sp0 = pt0.spin || 0;
-          const sp1 = pt1.spin || 0;
-          const a = (i / p.trail.length);
-
-          const x0a = s0.x + Math.cos(sp0) * armDist;
-          const y0a = s0.y + Math.sin(sp0) * armDist;
-          const x1a = s1.x + Math.cos(sp1) * armDist;
-          const y1a = s1.y + Math.sin(sp1) * armDist;
-
-          ctx.globalAlpha = a * 0.75;
-          ctx.lineWidth = 2.2 * a;
-          ctx.beginPath();
-          ctx.moveTo(x0a, y0a);
-          ctx.lineTo(x1a, y1a);
-          ctx.stroke();
-
-          // Trail 2 (Weight B)
-          const x0b = s0.x - Math.cos(sp0) * armDist;
-          const y0b = s0.y - Math.sin(sp0) * armDist;
-          const x1b = s1.x - Math.cos(sp1) * armDist;
-          const y1b = s1.y - Math.sin(sp1) * armDist;
-
-          ctx.beginPath();
-          ctx.moveTo(x0b, y0b);
-          ctx.lineTo(x1b, y1b);
-          ctx.stroke();
-        }
-
-      } else if (isGrape) {
-        // --- GRAPESHOT: INCANDESCENT CRIMSON & WHITE-HOT TRACER STREAM ---
+        // --- [2] BURST FIRE: SUPERSONIC KINETIC MACH CONE VAPOR TRAIL ---
         for (let i = 1; i < p.trail.length; i++) {
           const a = this._worldToScreen(p.trail[i - 1].x, p.trail[i - 1].y, camera);
           const b = this._worldToScreen(p.trail[i].x, p.trail[i].y, camera);
           const alpha = (i / p.trail.length);
 
-          // Outer red flame blur
-          ctx.strokeStyle = '#ef4444';
-          ctx.globalAlpha = alpha * 0.85;
-          ctx.lineWidth = 4 * alpha;
+          // Cyan plasma outer streak
+          ctx.strokeStyle = '#38bdf8';
+          ctx.globalAlpha = alpha * 0.75;
+          ctx.lineWidth = 3.5 * alpha;
           ctx.lineCap = 'round';
           ctx.beginPath();
           ctx.moveTo(a.x, a.y);
           ctx.lineTo(b.x, b.y);
           ctx.stroke();
 
-          // Inner white-hot tracer thread
+          // White-hot supersonic core
+          ctx.strokeStyle = '#ffffff';
+          ctx.globalAlpha = alpha * 0.95;
+          ctx.lineWidth = 1.4 * alpha;
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
+          ctx.stroke();
+        }
+
+      } else if (isGrape) {
+        // --- [3] SHOTGUN SPREAD: SHORT-RANGE INCANDESCENT CRIMSON TRACERS ---
+        for (let i = 1; i < p.trail.length; i++) {
+          const a = this._worldToScreen(p.trail[i - 1].x, p.trail[i - 1].y, camera);
+          const b = this._worldToScreen(p.trail[i].x, p.trail[i].y, camera);
+          const alpha = (i / p.trail.length);
+
+          ctx.strokeStyle = '#ef4444';
+          ctx.globalAlpha = alpha * 0.85;
+          ctx.lineWidth = 3.5 * alpha;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
+          ctx.stroke();
+
           ctx.strokeStyle = '#fef08a';
           ctx.globalAlpha = alpha * 0.95;
-          ctx.lineWidth = 1.8 * alpha;
+          ctx.lineWidth = 1.4 * alpha;
           ctx.beginPath();
           ctx.moveTo(a.x, a.y);
           ctx.lineTo(b.x, b.y);
@@ -1057,26 +1153,26 @@ class Renderer {
         }
 
       } else {
-        // --- ROUND SHOT: HEAVY BILLOWING GUNPOWDER SMOKE & FIRE JET ---
+        // --- [1] HEAVY SINGLE SHOT: DENSE BILLOWING GUNPOWDER SMOKE & FIRE JET ---
         for (let i = 1; i < p.trail.length; i++) {
           const a = this._worldToScreen(p.trail[i - 1].x, p.trail[i - 1].y, camera);
           const b = this._worldToScreen(p.trail[i].x, p.trail[i].y, camera);
           const alpha = (i / p.trail.length);
 
-          // Gunpowder smoke haze
+          // Dense gunpowder smoke cloud
           ctx.strokeStyle = 'rgba(71, 85, 105, 0.45)';
-          ctx.globalAlpha = alpha * 0.65;
-          ctx.lineWidth = radius * (0.8 + alpha * 1.2);
+          ctx.globalAlpha = alpha * 0.7;
+          ctx.lineWidth = radius * (0.9 + alpha * 1.3);
           ctx.lineCap = 'round';
           ctx.beginPath();
           ctx.moveTo(a.x, a.y);
           ctx.lineTo(b.x, b.y);
           ctx.stroke();
 
-          // Hot fire/ember core
+          // Intense fiery orange core
           ctx.strokeStyle = trailColor;
-          ctx.globalAlpha = alpha * 0.85;
-          ctx.lineWidth = radius * (0.3 + alpha * 0.5);
+          ctx.globalAlpha = alpha * 0.9;
+          ctx.lineWidth = radius * (0.35 + alpha * 0.55);
           ctx.beginPath();
           ctx.moveTo(a.x, a.y);
           ctx.lineTo(b.x, b.y);
@@ -1093,84 +1189,53 @@ class Renderer {
     // 3. BESPOKE BULLET VISUALS FOR AMMO 1, 2, AND 3
     if (isChain) {
       // =========================================================================
-      // [2] CHAIN SHOT: PROMINENT WHIRLING LINKED TWIN SPIKED WEIGHTS (32px wide)
+      // [2] 3-ROUND BURST: HIGH-VELOCITY KINETIC SABOT DART (Rapid Precision Salvo)
       // =========================================================================
-      const spinAngle = (p.spin !== undefined ? p.spin : (Date.now() * 0.022)) + p.id * 1.5;
-      ctx.rotate(spinAngle);
+      ctx.rotate(pAngle);
 
-      const armDist = 16; // 32px between the two heavy weights!
-
-      // Spinning aerodynamic motion blur crescent / disc
-      ctx.fillStyle = 'rgba(250, 204, 21, 0.16)';
+      // Supersonic mach-cone shockwave angle
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.55)';
+      ctx.lineWidth = 1.8;
       ctx.beginPath();
-      ctx.arc(0, 0, armDist + 6, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Outer golden energy aura
-      ctx.shadowColor = bType === 'sniper' ? '#38bdf8' : (bType === 'lightning' ? '#06b6d4' : '#fbbf24');
-      ctx.shadowBlur = 14;
-
-      // Heavy forged chain link connecting the weights
-      ctx.strokeStyle = '#ca8a04';
-      ctx.lineWidth = 3.2;
-      ctx.beginPath();
-      ctx.moveTo(-armDist, 0);
-      ctx.lineTo(armDist, 0);
+      ctx.moveTo(-14, -6.5);
+      ctx.lineTo(9, 0);
+      ctx.lineTo(-14, 6.5);
       ctx.stroke();
 
-      // Interlocking chain link loops
-      ctx.strokeStyle = '#fde047';
-      ctx.lineWidth = 1.6;
-      for (let l = -armDist + 5; l < armDist; l += 6) {
-        ctx.beginPath();
-        ctx.ellipse(l, 0, 3.5, 2, 0, 0, Math.PI * 2);
-        ctx.stroke();
-      }
+      // Glowing cyan kinetic sabot dart
+      ctx.shadowColor = '#38bdf8';
+      ctx.shadowBlur = 14;
 
-      // Draw the twin heavy spiked naval iron weights at both ends
-      [-armDist, armDist].forEach(bx => {
-        // Spiked weight outer glow
-        const wGrad = ctx.createRadialGradient(bx - 1.5, -1.5, 0, bx, 0, 6);
-        wGrad.addColorStop(0, '#fef08a');
-        wGrad.addColorStop(0.35, '#ca8a04');
-        wGrad.addColorStop(0.75, '#334155');
-        wGrad.addColorStop(1, '#0f172a');
-        ctx.fillStyle = wGrad;
-        ctx.beginPath();
-        ctx.arc(bx, 0, 5.5, 0, Math.PI * 2);
-        ctx.fill();
+      const bGrad = ctx.createLinearGradient(-12, 0, 10, 0);
+      bGrad.addColorStop(0, '#0284c7');
+      bGrad.addColorStop(0.5, '#38bdf8');
+      bGrad.addColorStop(1, '#ffffff');
+      ctx.fillStyle = bGrad;
+      ctx.beginPath();
+      ctx.moveTo(13, 0);
+      ctx.lineTo(-6, -4);
+      ctx.lineTo(-11, 0);
+      ctx.lineTo(-6, 4);
+      ctx.closePath();
+      ctx.fill();
 
-        // 4 lethal pointed iron spikes
-        ctx.fillStyle = '#fbbf24';
-        [0, Math.PI / 2, Math.PI, Math.PI * 1.5].forEach(spAngle => {
-          const sx = bx + Math.cos(spAngle) * 5.5;
-          const sy = Math.sin(spAngle) * 5.5;
-          const tipX = bx + Math.cos(spAngle) * 9.5;
-          const tipY = Math.sin(spAngle) * 9.5;
-          ctx.beginPath();
-          ctx.moveTo(sx - Math.sin(spAngle) * 2, sy + Math.cos(spAngle) * 2);
-          ctx.lineTo(tipX, tipY);
-          ctx.lineTo(sx + Math.sin(spAngle) * 2, sy - Math.cos(spAngle) * 2);
-          ctx.closePath();
-          ctx.fill();
-        });
+      // Blazing needle head
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.moveTo(11, 0);
+      ctx.lineTo(-3, -2);
+      ctx.lineTo(-6, 0);
+      ctx.lineTo(-3, 2);
+      ctx.closePath();
+      ctx.fill();
 
-        // Specular gleam
-        ctx.fillStyle = '#ffffff';
-        ctx.beginPath();
-        ctx.arc(bx - 1.8, -1.8, 1.5, 0, Math.PI * 2);
-        ctx.fill();
-      });
-
-      // Whirling spark flecks flying off the rotating tips
-      ctx.fillStyle = '#fffbeb';
-      const sparkA = Date.now() * 0.04;
-      ctx.fillRect(Math.cos(sparkA) * (armDist + 4), Math.sin(sparkA) * (armDist + 4), 2, 2);
-      ctx.fillRect(-Math.cos(sparkA) * (armDist + 4), -Math.sin(sparkA) * (armDist + 4), 2, 2);
+      // Electric kinetic speed sparks
+      ctx.fillStyle = '#bae6fd';
+      ctx.fillRect(-14, -1, 3, 2);
 
     } else if (isGrape) {
       // =========================================================================
-      // [3] GRAPESHOT: GLOWING MOLTEN SHRAPNEL SLUG (Blazing Red-Hot Tracer Pellet)
+      // [3] SHOTGUN SPREAD: SHORT-RANGE INCANDESCENT SHRAPNEL SLUG (High Point-Blank)
       // =========================================================================
       ctx.rotate(pAngle);
 
@@ -1178,14 +1243,14 @@ class Renderer {
       ctx.shadowColor = '#ef4444';
       ctx.shadowBlur = 16;
 
-      const gHalo = ctx.createRadialGradient(0, 0, 1, 0, 0, 14);
+      const gHalo = ctx.createRadialGradient(0, 0, 1, 0, 0, 13);
       gHalo.addColorStop(0, 'rgba(254, 240, 138, 0.9)');
       gHalo.addColorStop(0.35, 'rgba(249, 115, 22, 0.8)');
       gHalo.addColorStop(0.7, 'rgba(239, 68, 68, 0.45)');
       gHalo.addColorStop(1, 'rgba(239, 68, 68, 0)');
       ctx.fillStyle = gHalo;
       ctx.beginPath();
-      ctx.arc(0, 0, 14, 0, Math.PI * 2);
+      ctx.arc(0, 0, 13, 0, Math.PI * 2);
       ctx.fill();
 
       // Incandescent elongated lead pellet (aerodynamic teardrop)
@@ -1214,13 +1279,13 @@ class Renderer {
 
     } else {
       // =========================================================================
-      // [1] ROUND SHOT: HEAVY SOLID SIEGE CANNONBALL (With Elemental Gun Synergy)
+      // [1] HEAVY SINGLE SHOT: COLOSSAL SOLID SIEGE CANNONBALL (With Elemental Synergy)
       // =========================================================================
       ctx.rotate(pAngle);
 
       // Atmospheric shockwave bow wave in front of heavy ball
-      ctx.strokeStyle = 'rgba(251, 146, 60, 0.65)';
-      ctx.lineWidth = 2.4;
+      ctx.strokeStyle = 'rgba(251, 146, 60, 0.7)';
+      ctx.lineWidth = 2.8;
       ctx.beginPath();
       ctx.arc(0, 0, radius * 1.5, -0.65, 0.65);
       ctx.stroke();
